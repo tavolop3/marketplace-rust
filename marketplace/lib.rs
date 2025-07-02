@@ -1,18 +1,18 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 #[ink::contract]
-mod MarketplacePrincipal {
+mod marketplace {
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
-    pub struct MarketplacePrincipal {
+    pub struct Marketplace {
         /// Stores a single `bool` value on the storage.
         value: bool,
     }
 
-    impl MarketplacePrincipal {
+    impl Marketplace {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
         pub fn new(init_value: bool) -> Self {
@@ -53,17 +53,17 @@ mod MarketplacePrincipal {
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_works() {
-            let MarketplacePrincipal = MarketplacePrincipal::default();
-            assert_eq!(MarketplacePrincipal.get(), false);
+            let marketplace = Marketplace::default();
+            assert_eq!(marketplace.get(), false);
         }
 
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
-            let mut MarketplacePrincipal = MarketplacePrincipal::new(false);
-            assert_eq!(MarketplacePrincipal.get(), false);
-            MarketplacePrincipal.flip();
-            assert_eq!(MarketplacePrincipal.get(), true);
+            let mut marketplace = Marketplace::new(false);
+            assert_eq!(marketplace.get(), false);
+            marketplace.flip();
+            assert_eq!(marketplace.get(), true);
         }
     }
 
@@ -88,15 +88,15 @@ mod MarketplacePrincipal {
         #[ink_e2e::test]
         async fn default_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
             // Given
-            let mut constructor = MarketplacePrincipalRef::default();
+            let mut constructor = MarketplaceRef::default();
 
             // When
             let contract = client
-                .instantiate("MarketplacePrincipal", &ink_e2e::alice(), &mut constructor)
+                .instantiate("marketplace", &ink_e2e::alice(), &mut constructor)
                 .submit()
                 .await
                 .expect("instantiate failed");
-            let call_builder = contract.call_builder::<MarketplacePrincipal>();
+            let call_builder = contract.call_builder::<Marketplace>();
 
             // Then
             let get = call_builder.get();
@@ -110,13 +110,13 @@ mod MarketplacePrincipal {
         #[ink_e2e::test]
         async fn it_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
             // Given
-            let mut constructor = MarketplacePrincipalRef::new(false);
+            let mut constructor = MarketplaceRef::new(false);
             let contract = client
-                .instantiate("MarketplacePrincipal", &ink_e2e::bob(), &mut constructor)
+                .instantiate("marketplace", &ink_e2e::bob(), &mut constructor)
                 .submit()
                 .await
                 .expect("instantiate failed");
-            let mut call_builder = contract.call_builder::<MarketplacePrincipal>();
+            let mut call_builder = contract.call_builder::<Marketplace>();
 
             let get = call_builder.get();
             let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;

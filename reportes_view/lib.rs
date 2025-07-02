@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 #[ink::contract]
-mod ReportesView {
+mod reportes_view {
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
@@ -53,17 +53,17 @@ mod ReportesView {
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_works() {
-            let ReportesView = ReportesView::default();
-            assert_eq!(ReportesView.get(), false);
+            let reportes_view = ReportesView::default();
+            assert_eq!(reportes_view.get(), false);
         }
 
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
-            let mut ReportesView = ReportesView::new(false);
-            assert_eq!(ReportesView.get(), false);
-            ReportesView.flip();
-            assert_eq!(ReportesView.get(), true);
+            let mut reportes_view = ReportesView::new(false);
+            assert_eq!(reportes_view.get(), false);
+            reportes_view.flip();
+            assert_eq!(reportes_view.get(), true);
         }
     }
 
@@ -92,7 +92,7 @@ mod ReportesView {
 
             // When
             let contract = client
-                .instantiate("ReportesView", &ink_e2e::alice(), &mut constructor)
+                .instantiate("reportes_view", &ink_e2e::alice(), &mut constructor)
                 .submit()
                 .await
                 .expect("instantiate failed");
@@ -112,7 +112,7 @@ mod ReportesView {
             // Given
             let mut constructor = ReportesViewRef::new(false);
             let contract = client
-                .instantiate("ReportesView", &ink_e2e::bob(), &mut constructor)
+                .instantiate("reportes_view", &ink_e2e::bob(), &mut constructor)
                 .submit()
                 .await
                 .expect("instantiate failed");
