@@ -54,18 +54,19 @@ mod marketplace {
         #[ink::test]
         fn default_works() {
             let marketplace = Marketplace::default();
-            assert!(!marketplace.get());
+            assert_eq!(marketplace.get(), false);
         }
 
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
             let mut marketplace = Marketplace::new(false);
-            assert!(!marketplace.get());
+            assert_eq!(marketplace.get(), false);
             marketplace.flip();
-            assert!(marketplace.get());
+            assert_eq!(marketplace.get(), true);
         }
     }
+
 
     /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
     ///
