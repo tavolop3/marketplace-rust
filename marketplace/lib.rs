@@ -2,21 +2,97 @@
 
 #[ink::contract]
 mod marketplace {
+    use ink::prelude::string::String;
+    use ink::prelude::vec::Vec;
 
-    /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct Marketplace {
-        /// Stores a single `bool` value on the storage.
         value: bool,
+        // publicaciones: Vec<Publicacion>,
+        usuarios: Vec<Usuario>,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(
+        feature = "std",
+        derive(ink::storage::traits::StorageLayout)
+    )]
+    #[derive(Debug, Clone)]
+    pub struct Usuario {
+        account_id: AccountId,
+        username: String,
+        rol: Rol, 
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(
+        feature = "std",
+        derive(ink::storage::traits::StorageLayout)
+    )]
+    #[derive(Debug, Clone)]
+    pub enum Rol {
+        Comprador { ordenes_compra: Vec<OrdenCompra> },
+        Vendedor { publicaciones: Vec<Publicacion> },
+        Ambos,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(
+        feature = "std",
+        derive(ink::storage::traits::StorageLayout)
+    )]
+    #[derive(Debug, Clone)]
+    pub struct publicacion {
+        vendedor_id: AccountId,
+        nombre: String,
+        descripcion: String,
+        precio: f64,
+        categoria: Categoria,
+        stock: u32,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(
+        feature = "std",
+        derive(ink::storage::traits::StorageLayout)
+    )]
+    #[derive(Debug, Clone)]
+    pub struct Categoria {
+        Automovilismo,
+        Computacion,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(
+        feature = "std",
+        derive(ink::storage::traits::StorageLayout)
+    )]
+    #[derive(Debug, Clone)]
+    pub struct OrdenCompra {
+        estado: Estado, 
+        publicacion: Publicacion,
+        vendedor_id: AccountId,
+        comprardor_id: AccountId,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(
+        feature = "std",
+        derive(ink::storage::traits::StorageLayout)
+    )]
+    #[derive(Debug, Clone)]
+    pub struct Estado {
+        Pendiente, 
+        Enviada,
+        Recibida { calificacion_vendedor:1..5, calificacion_comprador: 1..5 }, 
+        Cancelada,
     }
 
     impl Marketplace {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
         pub fn new(init_value: bool) -> Self {
-            Self { value: init_value }
+            Self { value: init_value, usuarios:Default::default()  }
         }
 
         /// Constructor that initializes the `bool` value to `false`.
@@ -39,6 +115,21 @@ mod marketplace {
         #[ink(message)]
         pub fn get(&self) -> bool {
             self.value
+        }
+
+        #[ink(message)]
+        pub fn get_usuarios(&self) -> Vec<Usuario> {
+            self.usuarios.clone()
+        }
+
+        #[ink(message)]
+        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> bool {
+            self.usuarios.push(Usuario {
+                account_id: Self::env().account_id(),
+                username,
+                rol,
+            });
+            true
         }
     }
 
@@ -66,7 +157,6 @@ mod marketplace {
             assert_eq!(marketplace.get(), true);
         }
     }
-
 
     /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
     ///
