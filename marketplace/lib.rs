@@ -4,12 +4,13 @@
 mod marketplace {
     use ink::prelude::string::String;
     use ink::prelude::vec::Vec;
+    use ink::storage::Mapping;
 
     #[ink(storage)]
     pub struct Marketplace {
-        value: bool,
-        // publicaciones: Vec<Publicacion>,
-        usuarios: Vec<Usuario>,
+        usuarios: Mapping<AccountId,Usuario>,
+        publicaciones: Vec<Publicacion>,
+        ordenes_compra: Vec<OrdenCompra>
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -22,6 +23,9 @@ mod marketplace {
         account_id: AccountId,
         username: String,
         rol: Rol, 
+        publicaciones_vendedor: Option<Vec<Publicacion>>,
+        ordenes_compra_usuario: Option<Vec<OrdenCompra>>,
+        calificacion_promedio: u8
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -31,9 +35,9 @@ mod marketplace {
     )]
     #[derive(Debug, Clone)]
     pub enum Rol {
-        Comprador { ordenes_compra: Vec<OrdenCompra> },
-        Vendedor { publicaciones: Vec<Publicacion> },
-        Ambos,
+        Comprador,
+        Vendedor,
+        CompradorYVendedor,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -42,11 +46,11 @@ mod marketplace {
         derive(ink::storage::traits::StorageLayout)
     )]
     #[derive(Debug, Clone)]
-    pub struct publicacion {
+    pub struct Publicacion {
         vendedor_id: AccountId,
         nombre: String,
         descripcion: String,
-        precio: f64,
+        precio_decimal: u64,
         categoria: Categoria,
         stock: u32,
     }
@@ -57,9 +61,12 @@ mod marketplace {
         derive(ink::storage::traits::StorageLayout)
     )]
     #[derive(Debug, Clone)]
-    pub struct Categoria {
-        Automovilismo,
+    pub enum Categoria {
+        Vehiculo,
         Computacion,
+        Ropa,
+        Herramienta,
+        Mueble
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -81,55 +88,59 @@ mod marketplace {
         derive(ink::storage::traits::StorageLayout)
     )]
     #[derive(Debug, Clone)]
-    pub struct Estado {
+    pub enum Estado {
         Pendiente, 
         Enviada,
-        Recibida { calificacion_vendedor:1..5, calificacion_comprador: 1..5 }, 
-        Cancelada,
+        Recibida { calificacion_vendedor: UnoACinco, calificacion_comprador: UnoACinco }, 
+        Cancelada
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(
+        feature = "std",
+        derive(ink::storage::traits::StorageLayout)
+    )]
+    #[derive(Debug, Clone)]
+    pub enum UnoACinco {
+        Uno = 1,
+        Dos = 2,
+        Tres = 3,
+        Cuatro = 4,
+        Cinco = 5,
     }
 
     impl Marketplace {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value, usuarios:Default::default()  }
+        pub fn new() -> Self {
+            Self { 
+                usuarios: Default::default(), 
+                publicaciones: Default::default(),
+                ordenes_compra: Default::default()
+            }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
-        }
-
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
+        /*
         #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
+        pub fn get_usuarios(&self) -> Mapping<AccountId,Usuario> {
+            self.usuarios
         }
-
-        /// Simply returns the current value of our `bool`.
-        #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
-        }
+        */
 
         #[ink(message)]
-        pub fn get_usuarios(&self) -> Vec<Usuario> {
-            self.usuarios.clone()
-        }
-
-        #[ink(message)]
-        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> bool {
-            self.usuarios.push(Usuario {
+        pub fn registrar_usuario(&mut self, username: String, rol: Rol) {
+            self.usuarios.insert(Self::env().account_id(),&Usuario {
                 account_id: Self::env().account_id(),
                 username,
                 rol,
+                publicaciones_vendedor: None,
+                ordenes_compra_usuario: None,
+                calificacion_promedio: 0
             });
-            true
+        }
+
+        #[ink(message)]
+        pub fn calificacion(&self)-> UnoACinco {
+            UnoACinco::Uno
         }
     }
 
