@@ -8,31 +8,31 @@ mod marketplace {
 
     #[ink(storage)]
     pub struct Marketplace {
-        usuarios: Mapping<AccountId,Usuario>,
-        publicaciones: Vec<Publicacion>,
-        ordenes_compra: Vec<OrdenCompra>
+        usuarios: Mapping<AccountId,Usuario>,                   // (id_usuario, datos_usuario)
+        publicaciones: Mapping<AccountId, Vec<Producto>>,       // (id_vendedor, lista_de_productos)
+        ordenes_compra: Mapping<AccountId, Vec<OrdenCompra>>    // (id_comprador, lista_de_ordenes)
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    pub enum ErrorSistema {
+        UsuarioNoRegistrado
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct Usuario {
-        account_id: AccountId,
         username: String,
-        rol: Rol, 
-        publicaciones_vendedor: Option<Vec<Publicacion>>,
-        ordenes_compra_usuario: Option<Vec<OrdenCompra>>,
-        calificacion_promedio: u8
+        rol: Rol,
+        account_id: AccountId
+
+        //Las calificaciones se veran mas adelante
+        //calificacion_promedio: u8
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub enum Rol {
         Comprador,
@@ -41,65 +41,56 @@ mod marketplace {
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
-    pub struct Publicacion {
-        vendedor_id: AccountId,
-        nombre: String,
+    pub struct Producto {
+        nombre_producto: String,
         descripcion: String,
-        precio_decimal: u64,
         categoria: Categoria,
-        stock: u32,
+        precio: u64,
+        stock: u64
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub enum Categoria {
-        Vehiculo,
         Computacion,
         Ropa,
         Herramienta,
         Mueble
     }
-
+    
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct OrdenCompra {
         estado: Estado, 
-        publicacion: Publicacion,
+        producto: Producto,
+        comprador_id: AccountId,
         vendedor_id: AccountId,
-        comprardor_id: AccountId,
+        peticion_cancelacion: bool, // Solo el COMPRADOR puede hacer la peticion de cancelacion
+        cacelacion_total: bool      // El VENDEDOR debe aprobar la peticion de cancelacion
+
+        /* -- Se deja para mas adelante
+        calificacion_al_comprador: u8,
+        calificacion_al_vendedor: u8,
+        */
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub enum Estado {
         Pendiente, 
         Enviada,
-        Recibida { calificacion_vendedor: UnoACinco, calificacion_comprador: UnoACinco }, 
+        Recibida, 
         Cancelada
     }
 
+    /* -- Se deja para mas adelante
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std",derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub enum UnoACinco {
         Uno = 1,
@@ -108,6 +99,7 @@ mod marketplace {
         Cuatro = 4,
         Cinco = 5,
     }
+    */
 
     impl Marketplace {
         #[ink(constructor)]
@@ -119,29 +111,22 @@ mod marketplace {
             }
         }
 
-        /*
-        #[ink(message)]
-        pub fn get_usuarios(&self) -> Mapping<AccountId,Usuario> {
-            self.usuarios
-        }
-        */
-
+        // Funcion que registra un nuevo usuario en el sistema
         #[ink(message)]
         pub fn registrar_usuario(&mut self, username: String, rol: Rol) {
-            self.usuarios.insert(Self::env().account_id(),&Usuario {
-                account_id: Self::env().account_id(),
+            self.usuarios.insert(Self::env().caller(),&Usuario {
+                account_id: Self::env().caller(),
                 username,
-                rol,
-                publicaciones_vendedor: None,
-                ordenes_compra_usuario: None,
-                calificacion_promedio: 0
+                rol
             });
         }
 
+        // Funcion que busca un usuario en el sistema y lo retorna
         #[ink(message)]
-        pub fn calificacion(&self)-> UnoACinco {
-            UnoACinco::Uno
+        pub fn get_usuarios(&self) -> Result<Usuario,ErrorSistema> {
+            self.usuarios.get(Self::env().caller()).ok_or(ErrorSistema::UsuarioNoRegistrado)
         }
+        
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
