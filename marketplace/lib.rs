@@ -42,11 +42,11 @@ mod marketplace {
         derive(ink::storage::traits::StorageLayout)
     )]
     #[derive(Debug, Clone)]
-    pub struct publicacion {
+    pub struct Publicacion {
         vendedor_id: AccountId,
         nombre: String,
         descripcion: String,
-        precio: f64,
+        precio: u64,
         categoria: Categoria,
         stock: u32,
     }
@@ -57,7 +57,7 @@ mod marketplace {
         derive(ink::storage::traits::StorageLayout)
     )]
     #[derive(Debug, Clone)]
-    pub struct Categoria {
+    pub enum Categoria {
         Automovilismo,
         Computacion,
     }
@@ -81,10 +81,10 @@ mod marketplace {
         derive(ink::storage::traits::StorageLayout)
     )]
     #[derive(Debug, Clone)]
-    pub struct Estado {
+    pub enum Estado {
         Pendiente, 
         Enviada,
-        Recibida { calificacion_vendedor:1..5, calificacion_comprador: 1..5 }, 
+        Recibida,
         Cancelada,
     }
 
