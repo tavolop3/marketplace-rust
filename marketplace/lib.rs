@@ -4,12 +4,14 @@
 mod marketplace {
     use ink::prelude::string::String;
     use ink::prelude::vec::Vec;
+    use ink::storage::Mapping;
+
 
     #[ink(storage)]
     pub struct Marketplace {
-        value: bool,
-        // publicaciones: Vec<Publicacion>,
-        usuarios: Vec<Usuario>,
+        usuarios: Mapping<AccountId,Usuario>,                   // (id_usuario, datos_usuario)
+        publicaciones: Mapping<AccountId, Vec<Publicacion>>,       // (id_vendedor, lista_de_productos)
+        ordenes_compra: Mapping<AccountId, Vec<OrdenCompra>>    // (id_comprador, lista_de_ordenes)
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -89,42 +91,25 @@ mod marketplace {
     }
 
     impl Marketplace {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value, usuarios:Default::default()  }
+        pub fn new() -> Self {
+            Self { usuarios:Default::default(), ordenes_compra:Default::default(), publicaciones:Default::default()  }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
         /// Constructors can delegate to other constructors.
         #[ink(constructor)]
         pub fn default() -> Self {
-            Self::new(Default::default())
+            Self::new()
         }
 
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
-        #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
-        }
-
-        /// Simply returns the current value of our `bool`.
-        #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
-        }
-
-        #[ink(message)]
-        pub fn get_usuarios(&self) -> Vec<Usuario> {
-            self.usuarios.clone()
-        }
+        // #[ink(message)]
+        // pub fn get_usuarios(&self) -> Mapping<AccountId, Usuario> {
+        //     self.usuarios
+        // }
 
         #[ink(message)]
         pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> bool {
-            self.usuarios.push(Usuario {
+            self.usuarios.insert(self.env().caller(), &Usuario {
                 account_id: Self::env().account_id(),
                 username,
                 rol,
