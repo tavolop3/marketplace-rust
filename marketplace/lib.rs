@@ -6,12 +6,11 @@ mod marketplace {
     use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
 
-
     #[ink(storage)]
     pub struct Marketplace {
-        usuarios: Mapping<AccountId, Usuario>,                    // (id_usuario, datos_usuario)
-        publicaciones: Mapping<AccountId, Vec<Publicacion>>,     // (id_vendedor, lista_de_productos)
-        ordenes_compra: Mapping<AccountId, Vec<OrdenCompra>>    // (id_comprador, lista_de_ordenes)
+        usuarios: Mapping<AccountId, Usuario>, // (id_usuario, datos_usuario)
+        publicaciones: Mapping<AccountId, Vec<Publicacion>>, // (id_vendedor, lista_de_productos)
+        ordenes_compra: Mapping<AccountId, Vec<OrdenCompra>>, // (id_comprador, lista_de_ordenes)
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -20,18 +19,16 @@ mod marketplace {
         UsuarioNoRegistrado,
         UsuarioYaRegistrado,
         UsuarioNoEsVendedor,
+        UsuarioNoEsComprador,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct Usuario {
         account_id: AccountId,
         username: String,
-        rol: Rol, 
+        rol: Rol,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -68,7 +65,7 @@ mod marketplace {
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct OrdenCompra {
-        estado: Estado, 
+        estado: Estado,
         publicacion: Publicacion,
         vendedor_id: AccountId,
         comprador_id: AccountId,
@@ -80,7 +77,7 @@ mod marketplace {
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub enum Estado {
-        Pendiente, 
+        Pendiente,
         Enviada,
         Recibida,
         Cancelada,
@@ -95,10 +92,10 @@ mod marketplace {
     impl Marketplace {
         #[ink(constructor)]
         pub fn new() -> Self {
-            Self { 
-                usuarios:Default::default(), 
-                ordenes_compra:Default::default(), 
-                publicaciones:Default::default()  
+            Self {
+                usuarios: Default::default(),
+                ordenes_compra: Default::default(),
+                publicaciones: Default::default(),
             }
         }
 
@@ -110,15 +107,21 @@ mod marketplace {
 
         #[ink(message)]
         pub fn get_usuario(&self) -> Result<Usuario, ErrorSistema> {
-            self.usuarios.get(self.env().caller()).ok_or(ErrorSistema::UsuarioNoRegistrado)
+            self.usuarios
+                .get(self.env().caller())
+                .ok_or(ErrorSistema::UsuarioNoRegistrado)
         }
 
         #[ink(message)]
-        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<Usuario, ErrorSistema> {
+        pub fn registrar_usuario(
+            &mut self,
+            username: String,
+            rol: Rol,
+        ) -> Result<Usuario, ErrorSistema> {
             if self.usuarios.get(self.env().caller()).is_some() {
                 return Err(ErrorSistema::UsuarioYaRegistrado);
             };
-            
+
             let usuario = Usuario {
                 account_id: Self::env().account_id(),
                 username,
@@ -131,14 +134,20 @@ mod marketplace {
         }
 
         #[ink(message)]
-        pub fn publicar(&mut self, publicacion: Publicacion) -> Result<Vec<Publicacion>, ErrorSistema> {
+        pub fn publicar(
+            &mut self,
+            publicacion: Publicacion,
+        ) -> Result<Vec<Publicacion>, ErrorSistema> {
             let caller = self.env().caller();
-            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
+            let usuario = self
+                .usuarios
+                .get(caller)
+                .ok_or(ErrorSistema::UsuarioNoRegistrado)?;
 
             if matches!(usuario.rol, Rol::Comprador) {
                 return Err(ErrorSistema::UsuarioNoEsVendedor);
             }
-            
+
             let mut publicaciones = self.publicaciones.get(caller).unwrap_or_default();
             publicaciones.push(publicacion);
             self.publicaciones.insert(caller, &publicaciones);
@@ -149,15 +158,48 @@ mod marketplace {
         #[ink(message)]
         pub fn get_publicaciones(&mut self) -> Result<Vec<Publicacion>, ErrorSistema> {
             let caller = self.env().caller();
-            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
+            let usuario = self
+                .usuarios
+                .get(caller)
+                .ok_or(ErrorSistema::UsuarioNoRegistrado)?;
 
             if matches!(usuario.rol, Rol::Comprador) {
                 return Err(ErrorSistema::UsuarioNoEsVendedor);
             }
-            
+
             let publicaciones = self.publicaciones.get(caller).unwrap_or_default();
             Ok(publicaciones)
         }
+
+        #[ink(message)]
+        pub fn ordenar_compra(&mut self, orden_compra: OrdenCompra) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            let caller = self.env().caller();
+            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
+
+            if matches!(usuario.rol, Rol::Vendedor) {
+                return Err(ErrorSistema::UsuarioNoEsComprador);
+            }
+            
+            let mut ordenes_compra = self.ordenes_compra.get(caller).unwrap_or_default();
+            ordenes_compra.push(orden_compra);
+            self.ordenes_compra.insert(caller, &ordenes_compra);
+
+            Ok(ordenes_compra)
+        }
+
+        #[ink(message)]
+        pub fn get_ordenes(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            let caller = self.env().caller();
+            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
+
+            if matches!(usuario.rol, Rol::Vendedor) {
+                return Err(ErrorSistema::UsuarioNoEsComprador);
+            }
+            
+            let ordenes_compra = self.ordenes_compra.get(caller).unwrap_or_default();
+            Ok(ordenes_compra)
+        }
+
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
