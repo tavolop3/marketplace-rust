@@ -9,7 +9,7 @@ mod marketplace {
 
     #[ink(storage)]
     pub struct Marketplace {
-        usuarios: Mapping<AccountId,Usuario>,                   // (id_usuario, datos_usuario)
+        usuarios: Mapping<AccountId, Usuario>,                   // (id_usuario, datos_usuario)
         publicaciones: Mapping<AccountId, Vec<Publicacion>>,       // (id_vendedor, lista_de_productos)
         ordenes_compra: Mapping<AccountId, Vec<OrdenCompra>>    // (id_comprador, lista_de_ordenes)
     }
