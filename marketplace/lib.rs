@@ -15,6 +15,12 @@ mod marketplace {
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    pub enum ErrorSistema {
+        UsuarioNoRegistrado
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(
         feature = "std",
         derive(ink::storage::traits::StorageLayout)
@@ -102,10 +108,10 @@ mod marketplace {
             Self::new()
         }
 
-        // #[ink(message)]
-        // pub fn get_usuarios(&self) -> Mapping<AccountId, Usuario> {
-        //     self.usuarios
-        // }
+        #[ink(message)]
+        pub fn get_usuario(&self) -> Result<Usuario, ErrorSistema> {
+            self.usuarios.get(self.env().caller()).ok_or(ErrorSistema::UsuarioNoRegistrado)
+        }
 
         #[ink(message)]
         pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> bool {
