@@ -9,8 +9,8 @@ mod marketplace {
 
     #[ink(storage)]
     pub struct Marketplace {
-        usuarios: Mapping<AccountId, Usuario>,                   // (id_usuario, datos_usuario)
-        publicaciones: Mapping<AccountId, Vec<Publicacion>>,       // (id_vendedor, lista_de_productos)
+        usuarios: Mapping<AccountId, Usuario>,                    // (id_usuario, datos_usuario)
+        publicaciones: Mapping<AccountId, Vec<Publicacion>>,     // (id_vendedor, lista_de_productos)
         ordenes_compra: Mapping<AccountId, Vec<OrdenCompra>>    // (id_comprador, lista_de_ordenes)
     }
 
@@ -19,6 +19,7 @@ mod marketplace {
     pub enum ErrorSistema {
         UsuarioNoRegistrado,
         UsuarioYaRegistrado,
+        UsuarioNoEsVendedor,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -127,6 +128,35 @@ mod marketplace {
             self.usuarios.insert(self.env().caller(), &usuario);
 
             Ok(usuario)
+        }
+
+        #[ink(message)]
+        pub fn publicar(&mut self, publicacion: Publicacion) -> Result<Vec<Publicacion>, ErrorSistema> {
+            let caller = self.env().caller();
+            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
+
+            if matches!(usuario.rol, Rol::Comprador) {
+                return Err(ErrorSistema::UsuarioNoEsVendedor);
+            }
+            
+            let mut publicaciones = self.publicaciones.get(caller).unwrap_or_default();
+            publicaciones.push(publicacion);
+            self.publicaciones.insert(caller, &publicaciones);
+
+            Ok(publicaciones)
+        }
+
+        #[ink(message)]
+        pub fn get_publicaciones(&mut self) -> Result<Vec<Publicacion>, ErrorSistema> {
+            let caller = self.env().caller();
+            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
+
+            if matches!(usuario.rol, Rol::Comprador) {
+                return Err(ErrorSistema::UsuarioNoEsVendedor);
+            }
+            
+            let publicaciones = self.publicaciones.get(caller).unwrap_or_default();
+            Ok(publicaciones)
         }
     }
 
