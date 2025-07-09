@@ -17,7 +17,8 @@ mod marketplace {
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub enum ErrorSistema {
-        UsuarioNoRegistrado
+        UsuarioNoRegistrado,
+        UsuarioYaRegistrado,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -33,61 +34,49 @@ mod marketplace {
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub enum Rol {
-        Comprador { ordenes_compra: Vec<OrdenCompra> },
-        Vendedor { publicaciones: Vec<Publicacion> },
+        Comprador,
+        Vendedor,
         Ambos,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct Publicacion {
-        vendedor_id: AccountId,
-        nombre: String,
+        nombre_producto: String,
         descripcion: String,
         precio: u64,
         categoria: Categoria,
-        stock: u32,
+        stock: u64,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub enum Categoria {
-        Automovilismo,
         Computacion,
+        Ropa,
+        Herramientas,
+        Muebles,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct OrdenCompra {
         estado: Estado, 
         publicacion: Publicacion,
         vendedor_id: AccountId,
-        comprardor_id: AccountId,
+        comprador_id: AccountId,
+        peticion_cancelacion: bool, // La peticion la hace el comprador, el vendedor acepta, esta
+                                    // logica se maneja en el método (?)
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    #[cfg_attr(
-        feature = "std",
-        derive(ink::storage::traits::StorageLayout)
-    )]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub enum Estado {
         Pendiente, 
@@ -96,10 +85,20 @@ mod marketplace {
         Cancelada,
     }
 
+    impl Default for Marketplace {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl Marketplace {
         #[ink(constructor)]
         pub fn new() -> Self {
-            Self { usuarios:Default::default(), ordenes_compra:Default::default(), publicaciones:Default::default()  }
+            Self { 
+                usuarios:Default::default(), 
+                ordenes_compra:Default::default(), 
+                publicaciones:Default::default()  
+            }
         }
 
         /// Constructors can delegate to other constructors.
@@ -114,13 +113,20 @@ mod marketplace {
         }
 
         #[ink(message)]
-        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> bool {
-            self.usuarios.insert(self.env().caller(), &Usuario {
+        pub fn registrar_usuario(&mut self, username: String, rol: Rol) -> Result<Usuario, ErrorSistema> {
+            if self.usuarios.get(self.env().caller()).is_some() {
+                return Err(ErrorSistema::UsuarioYaRegistrado);
+            };
+            
+            let usuario = Usuario {
                 account_id: Self::env().account_id(),
                 username,
                 rol,
-            });
-            true
+            };
+
+            self.usuarios.insert(self.env().caller(), &usuario);
+
+            Ok(usuario)
         }
     }
 
