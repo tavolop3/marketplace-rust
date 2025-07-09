@@ -20,6 +20,10 @@ mod marketplace {
         UsuarioYaRegistrado,
         UsuarioNoEsVendedor,
         UsuarioNoEsComprador,
+        VendedorNoExistente,
+        VendedorSinPublicaciones,
+        PublicacionSinStock,
+        PublicacionNoExistente,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -44,6 +48,8 @@ mod marketplace {
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct Publicacion {
+        id: u64,
+        vendedor_id: AccountId,
         nombre_producto: String,
         descripcion: String,
         precio: u64,
@@ -67,7 +73,6 @@ mod marketplace {
     pub struct OrdenCompra {
         estado: Estado,
         publicacion: Publicacion,
-        vendedor_id: AccountId,
         comprador_id: AccountId,
         peticion_cancelacion: bool, // La peticion la hace el comprador, el vendedor acepta, esta
                                     // logica se maneja en el método (?)
@@ -172,14 +177,41 @@ mod marketplace {
         }
 
         #[ink(message)]
-        pub fn ordenar_compra(&mut self, orden_compra: OrdenCompra) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+        pub fn ordenar_compra(&mut self, id_vendedor: AccountId, id_publicacion: u64) -> Result<Vec<OrdenCompra>, ErrorSistema> {
             let caller = self.env().caller();
-            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
 
+            // validaciones de comprador
+            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
             if matches!(usuario.rol, Rol::Vendedor) {
                 return Err(ErrorSistema::UsuarioNoEsComprador);
             }
-            
+
+            // validaciones de vendedor
+            let vendedor = self.usuarios.get(id_vendedor).ok_or(ErrorSistema::VendedorNoExistente)?;
+            if matches!(vendedor.rol, Rol::Comprador) {
+                return Err(ErrorSistema::UsuarioNoEsVendedor);
+            }
+
+            // buscar publicacion, descrementar stock y aplicarlo
+            let mut publicaciones = self.publicaciones.get(id_vendedor).ok_or(ErrorSistema::VendedorSinPublicaciones)?;
+            let publicacion_clone = {
+                let publicacion = publicaciones.iter_mut().find(|p| p.id == id_publicacion)
+                    .ok_or(ErrorSistema::PublicacionNoExistente)?;
+                if publicacion.stock == 0 {
+                    return Err(ErrorSistema::PublicacionSinStock);
+                }
+                publicacion.stock = publicacion.stock.checked_sub(1).expect("No hay stock (igualmente fue chequeado)"); // por el lint de clippy que tiraba error
+                publicacion.clone()
+            };
+            self.publicaciones.insert(id_vendedor, &publicaciones);
+
+            // crear orden de compra
+            let orden_compra = OrdenCompra {
+                estado: Estado::Pendiente,
+                publicacion: publicacion_clone,
+                comprador_id: caller,
+                peticion_cancelacion: false,
+            };
             let mut ordenes_compra = self.ordenes_compra.get(caller).unwrap_or_default();
             ordenes_compra.push(orden_compra);
             self.ordenes_compra.insert(caller, &ordenes_compra);
