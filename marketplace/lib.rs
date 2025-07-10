@@ -24,6 +24,8 @@ mod marketplace {
         VendedorSinPublicaciones,
         PublicacionSinStock,
         PublicacionNoExistente,
+        IdPublicacionYaRegistrado,
+        OverflowIdProducto,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -118,17 +120,13 @@ mod marketplace {
         }
 
         #[ink(message)]
-        pub fn registrar_usuario(
-            &mut self,
-            username: String,
-            rol: Rol,
-        ) -> Result<Usuario, ErrorSistema> {
+        pub fn registrar_usuario(&mut self,username: String,rol: Rol) -> Result<Usuario, ErrorSistema> {
             if self.usuarios.get(self.env().caller()).is_some() {
                 return Err(ErrorSistema::UsuarioYaRegistrado);
             };
 
             let usuario = Usuario {
-                account_id: Self::env().account_id(),
+                account_id: self.env().caller(),
                 username,
                 rol,
             };
@@ -139,58 +137,38 @@ mod marketplace {
         }
 
         #[ink(message)]
-        pub fn publicar(
-            &mut self,
-            publicacion: Publicacion,
-        ) -> Result<Vec<Publicacion>, ErrorSistema> {
-            let caller = self.env().caller();
-            let usuario = self
-                .usuarios
-                .get(caller)
-                .ok_or(ErrorSistema::UsuarioNoRegistrado)?;
+        pub fn publicar(&mut self,publicacion: Publicacion) -> Result<Vec<Publicacion>, ErrorSistema> {
+            let usuario = self.get_usuario()?;
+            usuario.es_vendedor()?;
 
-            if matches!(usuario.rol, Rol::Comprador) {
-                return Err(ErrorSistema::UsuarioNoEsVendedor);
+            let mut publicaciones = self.publicaciones.get(usuario.account_id).unwrap_or_default();
+            let existe_publicacion = publicaciones.iter().any(|p| p.id == publicacion.id);
+            if existe_publicacion {         
+                return Err(ErrorSistema::IdPublicacionYaRegistrado);
             }
 
-            let mut publicaciones = self.publicaciones.get(caller).unwrap_or_default();
             publicaciones.push(publicacion);
-            self.publicaciones.insert(caller, &publicaciones);
+            self.publicaciones.insert(usuario.account_id, &publicaciones);
+            Ok(publicaciones)   
+        }
 
+        #[ink(message)]
+        pub fn get_publicaciones_vendedor(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
+            let usuario = self.get_usuario()?;
+            usuario.es_vendedor()?;
+            let publicaciones = self.publicaciones.get(usuario.account_id).unwrap_or_default();
             Ok(publicaciones)
         }
 
         #[ink(message)]
-        pub fn get_publicaciones(&mut self) -> Result<Vec<Publicacion>, ErrorSistema> {
-            let caller = self.env().caller();
-            let usuario = self
-                .usuarios
-                .get(caller)
-                .ok_or(ErrorSistema::UsuarioNoRegistrado)?;
-
-            if matches!(usuario.rol, Rol::Comprador) {
-                return Err(ErrorSistema::UsuarioNoEsVendedor);
-            }
-
-            let publicaciones = self.publicaciones.get(caller).unwrap_or_default();
-            Ok(publicaciones)
-        }
-
-        #[ink(message)]
-        pub fn ordenar_compra(&mut self, id_vendedor: AccountId, id_publicacion: u64) -> Result<Vec<OrdenCompra>, ErrorSistema> {
-            let caller = self.env().caller();
-
+        pub fn ordenar_compra(&mut self,id_vendedor: AccountId,id_publicacion: u64) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            // validaciones de usuario
+            let usuario = self.get_usuario()?;
             // validaciones de comprador
-            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
-            if matches!(usuario.rol, Rol::Vendedor) {
-                return Err(ErrorSistema::UsuarioNoEsComprador);
-            }
-
+            usuario.es_comprador()?;
             // validaciones de vendedor
             let vendedor = self.usuarios.get(id_vendedor).ok_or(ErrorSistema::VendedorNoExistente)?;
-            if matches!(vendedor.rol, Rol::Comprador) {
-                return Err(ErrorSistema::UsuarioNoEsVendedor);
-            }
+            vendedor.es_vendedor()?;
 
             // buscar publicacion, descrementar stock y aplicarlo
             let mut publicaciones = self.publicaciones.get(id_vendedor).ok_or(ErrorSistema::VendedorSinPublicaciones)?;
@@ -209,53 +187,134 @@ mod marketplace {
             let orden_compra = OrdenCompra {
                 estado: Estado::Pendiente,
                 publicacion: publicacion_clone,
-                comprador_id: caller,
+                comprador_id: usuario.account_id,
                 peticion_cancelacion: false,
             };
-            let mut ordenes_compra = self.ordenes_compra.get(caller).unwrap_or_default();
+
+            let mut ordenes_compra = self.ordenes_compra.get(usuario.account_id).unwrap_or_default();
             ordenes_compra.push(orden_compra);
-            self.ordenes_compra.insert(caller, &ordenes_compra);
+            self.ordenes_compra.insert(usuario.account_id, &ordenes_compra);
 
             Ok(ordenes_compra)
         }
 
         #[ink(message)]
-        pub fn get_ordenes(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
-            let caller = self.env().caller();
-            let usuario = self.usuarios.get(caller).ok_or(ErrorSistema::UsuarioNoRegistrado)?;
-
-            if matches!(usuario.rol, Rol::Vendedor) {
-                return Err(ErrorSistema::UsuarioNoEsComprador);
-            }
-            
-            let ordenes_compra = self.ordenes_compra.get(caller).unwrap_or_default();
+        pub fn get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            let usuario = self.get_usuario()?;
+            usuario.es_comprador()?;
+            let ordenes_compra = self.ordenes_compra.get(usuario.account_id).unwrap_or_default();
             Ok(ordenes_compra)
         }
-
     }
 
-    /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
-    /// module and test functions are marked with a `#[test]` attribute.
-    /// The below code is technically just normal Rust code.
-    #[cfg(test)]
-    mod tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
-        use super::*;
+    impl Publicacion {
+        pub fn new(id:u64, vendedor_id:AccountId, nombre_producto:String, descripcion:String, precio:u64, categoria:Categoria, stock:u64) -> Publicacion {
+            Publicacion {
+                id,
+                vendedor_id,
+                nombre_producto,
+                descripcion,
+                precio,
+                categoria,
+                stock
+            }
+        }
+    }
 
-        /// We test if the default constructor does its job.
-        #[ink::test]
-        fn default_works() {
-            let marketplace = Marketplace::default();
-            assert_eq!(marketplace.get(), false);
+    impl Usuario {
+        fn es_vendedor(&self)-> Result<bool,ErrorSistema> {
+            if matches!(self.rol, Rol::Comprador) {
+                Err(ErrorSistema::UsuarioNoEsVendedor)
+            } else {
+                Ok(true)
+            }
         }
 
-        /// We test a simple use case of our contract.
-        #[ink::test]
-        fn it_works() {
-            let mut marketplace = Marketplace::new(false);
-            assert_eq!(marketplace.get(), false);
-            marketplace.flip();
-            assert_eq!(marketplace.get(), true);
+        fn es_comprador(&self)-> Result<bool,ErrorSistema> {
+            if matches!(self.rol, Rol::Vendedor) {
+                Err(ErrorSistema::UsuarioNoEsComprador)
+            } else {
+                Ok(true)
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        mod tests_es_vendedor {
+            use super::*;
+
+            #[test]
+            fn test_es_vendedor_true_vendedor(){
+                let usuario = Usuario {
+                    account_id: 22,
+                    username: agustin22,
+                    rol: Rol::Vendedor
+                };
+
+                assert_eq!(usuario.es_vendedor(),true);
+            }
+
+            #[test]
+            fn test_es_vendedor_true_ambos(){
+                let usuario = Usuario {
+                    account_id: 22,
+                    username: agustin22,
+                    rol: Rol::Ambos
+                };
+
+                assert_eq!(usuario.es_vendedor(),true);
+            }
+
+            #[test]
+            fn test_es_vendedor_false(){
+                let usuario = Usuario {
+                    account_id: 22,
+                    username: agustin22,
+                    rol: Rol::Comprador
+                };
+
+                assert_eq!(usuario.es_vendedor(),false);
+            }
+        }
+
+        mod tests_es_comprador {
+            use super::*;
+
+            #[test]
+            fn test_es_comprador_true_comprador(){
+                let usuario = Usuario {
+                    account_id: 22,
+                    username: agustin22,
+                    rol: Rol::Comprador
+                };
+
+                assert_eq!(usuario.es_comprador(),true);
+            }
+
+            #[test]
+            fn test_es_comprador_true_ambos(){
+                let usuario = Usuario {
+                    account_id: 22,
+                    username: agustin22,
+                    rol: Rol::Ambos
+                };
+
+                assert_eq!(usuario.es_comprador(),true);
+            }
+
+            #[test]
+            fn test_es_comprador_false(){
+                let usuario = Usuario {
+                    account_id: 22,
+                    username: agustin22,
+                    rol: Rol::Vendedor
+                };
+
+                assert_eq!(usuario.es_comprador(),false);
+            }
         }
     }
 
