@@ -8,13 +8,20 @@ mod marketplace {
 
     #[ink(storage)]
     pub struct Marketplace {
-        usuarios: Mapping<AccountId, Usuario>, // (id_usuario, datos_usuario)
-        publicaciones: Mapping<AccountId, Vec<Publicacion>>, // (id_vendedor, lista_de_productos)
-        ordenes_compra: Mapping<AccountId, Vec<OrdenCompra>>, // (id_comprador, lista_de_ordenes)
+        usuarios: Mapping<AccountId, Usuario>, // (id_usuario, datos_usuario) este capaz tmbn tenga
+        // que ser un vec y un mapping aparte, depende de lo que necesitemos
+        // pq si queremos obtener todos los usuarios y mostrarlos sonamos
+
+        // storage general y mapping para mejorar performance
+        publicaciones: Vec<Publicacion>,
+        ordenes_compra: Vec<OrdenCompra>,
+        publicaciones_mapping: Mapping<AccountId, Vec<u32>>, // (id_vendedor, id's publicaciones)
+        ordenes_compra_mapping: Mapping<AccountId, Vec<OrdenCompra>>, // (id_comprador, id's ordenes)
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    #[derive(Debug)]
     pub enum ErrorSistema {
         UsuarioNoRegistrado,
         UsuarioYaRegistrado,
@@ -24,7 +31,6 @@ mod marketplace {
         VendedorSinPublicaciones,
         PublicacionSinStock,
         PublicacionNoExistente,
-        IdPublicacionYaRegistrado,
         OverflowIdProducto,
     }
 
@@ -50,7 +56,6 @@ mod marketplace {
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct Publicacion {
-        id: u64,
         vendedor_id: AccountId,
         nombre_producto: String,
         descripcion: String,
@@ -101,8 +106,10 @@ mod marketplace {
         pub fn new() -> Self {
             Self {
                 usuarios: Default::default(),
-                ordenes_compra: Default::default(),
                 publicaciones: Default::default(),
+                ordenes_compra: Default::default(),
+                publicaciones_mapping: Default::default(),
+                ordenes_compra_mapping: Default::default(),
             }
         }
 
@@ -120,7 +127,11 @@ mod marketplace {
         }
 
         #[ink(message)]
-        pub fn registrar_usuario(&mut self,username: String,rol: Rol) -> Result<Usuario, ErrorSistema> {
+        pub fn registrar_usuario(
+            &mut self,
+            username: String,
+            rol: Rol,
+        ) -> Result<Usuario, ErrorSistema> {
             if self.usuarios.get(self.env().caller()).is_some() {
                 return Err(ErrorSistema::UsuarioYaRegistrado);
             };
@@ -137,48 +148,75 @@ mod marketplace {
         }
 
         #[ink(message)]
-        pub fn publicar(&mut self,publicacion: Publicacion) -> Result<Vec<Publicacion>, ErrorSistema> {
+        pub fn publicar(&mut self, publicacion: Publicacion) -> Result<Publicacion, ErrorSistema> {
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
 
-            let mut publicaciones = self.publicaciones.get(usuario.account_id).unwrap_or_default();
-            let existe_publicacion = publicaciones.iter().any(|p| p.id == publicacion.id);
-            if existe_publicacion {         
-                return Err(ErrorSistema::IdPublicacionYaRegistrado);
-            }
+            let mut publicaciones_vendedor = self
+                .publicaciones_mapping
+                .get(usuario.account_id)
+                .unwrap_or_default();
 
-            publicaciones.push(publicacion);
-            self.publicaciones.insert(usuario.account_id, &publicaciones);
-            Ok(publicaciones)   
+            self.publicaciones.push(publicacion.clone());
+            publicaciones_vendedor.push(self.publicaciones.len() as u32 - 1); // agrega el index de la publicacion
+            self.publicaciones_mapping
+                .insert(usuario.account_id, &publicaciones_vendedor);
+
+            Ok(publicacion)
         }
 
         #[ink(message)]
         pub fn get_publicaciones_vendedor(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
-            let publicaciones = self.publicaciones.get(usuario.account_id).unwrap_or_default();
-            Ok(publicaciones)
+            let ids_publicaciones_vendedor = self
+                .publicaciones_mapping
+                .get(usuario.account_id)
+                .unwrap_or_default();
+
+            let publicaciones_vendedor = ids_publicaciones_vendedor
+                .iter()
+                .filter_map(|&i| self.publicaciones.get(i as usize))
+                .cloned()
+                .collect();
+
+            Ok(publicaciones_vendedor)
         }
 
         #[ink(message)]
-        pub fn ordenar_compra(&mut self,id_vendedor: AccountId,id_publicacion: u64) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+        pub fn ordenar_compra(
+            &mut self,
+            id_vendedor: AccountId,
+            id_publicacion: u64,
+        ) -> Result<Vec<OrdenCompra>, ErrorSistema> {
             // validaciones de usuario
             let usuario = self.get_usuario()?;
             // validaciones de comprador
             usuario.es_comprador()?;
             // validaciones de vendedor
-            let vendedor = self.usuarios.get(id_vendedor).ok_or(ErrorSistema::VendedorNoExistente)?;
+            let vendedor = self
+                .usuarios
+                .get(id_vendedor)
+                .ok_or(ErrorSistema::VendedorNoExistente)?;
             vendedor.es_vendedor()?;
 
             // buscar publicacion, descrementar stock y aplicarlo
-            let mut publicaciones = self.publicaciones.get(id_vendedor).ok_or(ErrorSistema::VendedorSinPublicaciones)?;
+            let mut publicaciones = self
+                .publicaciones
+                .get(id_vendedor)
+                .ok_or(ErrorSistema::VendedorSinPublicaciones)?;
             let publicacion_clone = {
-                let publicacion = publicaciones.iter_mut().find(|p| p.id == id_publicacion)
+                let publicacion = publicaciones
+                    .iter_mut()
+                    .find(|p| p.id == id_publicacion)
                     .ok_or(ErrorSistema::PublicacionNoExistente)?;
                 if publicacion.stock == 0 {
                     return Err(ErrorSistema::PublicacionSinStock);
                 }
-                publicacion.stock = publicacion.stock.checked_sub(1).expect("No hay stock (igualmente fue chequeado)"); // por el lint de clippy que tiraba error
+                publicacion.stock = publicacion
+                    .stock
+                    .checked_sub(1)
+                    .expect("No hay stock (igualmente fue chequeado)"); // por el lint de clippy que tiraba error
                 publicacion.clone()
             };
             self.publicaciones.insert(id_vendedor, &publicaciones);
@@ -191,9 +229,13 @@ mod marketplace {
                 peticion_cancelacion: false,
             };
 
-            let mut ordenes_compra = self.ordenes_compra.get(usuario.account_id).unwrap_or_default();
+            let mut ordenes_compra = self
+                .ordenes_compra
+                .get(usuario.account_id)
+                .unwrap_or_default();
             ordenes_compra.push(orden_compra);
-            self.ordenes_compra.insert(usuario.account_id, &ordenes_compra);
+            self.ordenes_compra
+                .insert(usuario.account_id, &ordenes_compra);
 
             Ok(ordenes_compra)
         }
@@ -202,13 +244,24 @@ mod marketplace {
         pub fn get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
             let usuario = self.get_usuario()?;
             usuario.es_comprador()?;
-            let ordenes_compra = self.ordenes_compra.get(usuario.account_id).unwrap_or_default();
+            let ordenes_compra = self
+                .ordenes_compra
+                .get(usuario.account_id)
+                .unwrap_or_default();
             Ok(ordenes_compra)
         }
     }
 
     impl Publicacion {
-        pub fn new(id:u64, vendedor_id:AccountId, nombre_producto:String, descripcion:String, precio:u64, categoria:Categoria, stock:u64) -> Publicacion {
+        pub fn new(
+            id: u64,
+            vendedor_id: AccountId,
+            nombre_producto: String,
+            descripcion: String,
+            precio: u64,
+            categoria: Categoria,
+            stock: u64,
+        ) -> Publicacion {
             Publicacion {
                 id,
                 vendedor_id,
@@ -216,13 +269,13 @@ mod marketplace {
                 descripcion,
                 precio,
                 categoria,
-                stock
+                stock,
             }
         }
     }
 
     impl Usuario {
-        fn es_vendedor(&self)-> Result<bool,ErrorSistema> {
+        fn es_vendedor(&self) -> Result<bool, ErrorSistema> {
             if matches!(self.rol, Rol::Comprador) {
                 Err(ErrorSistema::UsuarioNoEsVendedor)
             } else {
@@ -230,7 +283,7 @@ mod marketplace {
             }
         }
 
-        fn es_comprador(&self)-> Result<bool,ErrorSistema> {
+        fn es_comprador(&self) -> Result<bool, ErrorSistema> {
             if matches!(self.rol, Rol::Vendedor) {
                 Err(ErrorSistema::UsuarioNoEsComprador)
             } else {
@@ -247,36 +300,36 @@ mod marketplace {
             use super::*;
 
             #[test]
-            fn test_es_vendedor_true_vendedor(){
+            fn test_es_vendedor_true_vendedor() {
                 let usuario = Usuario {
                     account_id: 22,
                     username: agustin22,
-                    rol: Rol::Vendedor
+                    rol: Rol::Vendedor,
                 };
 
-                assert_eq!(usuario.es_vendedor(),true);
+                assert_eq!(usuario.es_vendedor(), true);
             }
 
             #[test]
-            fn test_es_vendedor_true_ambos(){
+            fn test_es_vendedor_true_ambos() {
                 let usuario = Usuario {
                     account_id: 22,
                     username: agustin22,
-                    rol: Rol::Ambos
+                    rol: Rol::Ambos,
                 };
 
-                assert_eq!(usuario.es_vendedor(),true);
+                assert_eq!(usuario.es_vendedor(), true);
             }
 
             #[test]
-            fn test_es_vendedor_false(){
+            fn test_es_vendedor_false() {
                 let usuario = Usuario {
                     account_id: 22,
                     username: agustin22,
-                    rol: Rol::Comprador
+                    rol: Rol::Comprador,
                 };
 
-                assert_eq!(usuario.es_vendedor(),false);
+                assert_eq!(usuario.es_vendedor(), false);
             }
         }
 
@@ -284,36 +337,36 @@ mod marketplace {
             use super::*;
 
             #[test]
-            fn test_es_comprador_true_comprador(){
+            fn test_es_comprador_true_comprador() {
                 let usuario = Usuario {
                     account_id: 22,
                     username: agustin22,
-                    rol: Rol::Comprador
+                    rol: Rol::Comprador,
                 };
 
-                assert_eq!(usuario.es_comprador(),true);
+                assert_eq!(usuario.es_comprador(), true);
             }
 
             #[test]
-            fn test_es_comprador_true_ambos(){
+            fn test_es_comprador_true_ambos() {
                 let usuario = Usuario {
                     account_id: 22,
                     username: agustin22,
-                    rol: Rol::Ambos
+                    rol: Rol::Ambos,
                 };
 
-                assert_eq!(usuario.es_comprador(),true);
+                assert_eq!(usuario.es_comprador(), true);
             }
 
             #[test]
-            fn test_es_comprador_false(){
+            fn test_es_comprador_false() {
                 let usuario = Usuario {
                     account_id: 22,
                     username: agustin22,
-                    rol: Rol::Vendedor
+                    rol: Rol::Vendedor,
                 };
 
-                assert_eq!(usuario.es_comprador(),false);
+                assert_eq!(usuario.es_comprador(), false);
             }
         }
     }
