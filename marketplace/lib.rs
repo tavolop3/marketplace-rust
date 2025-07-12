@@ -152,12 +152,12 @@ mod marketplace {
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
 
+            // agrega al vector total y el id al mapping
+            self.publicaciones.push(publicacion.clone());
             let mut publicaciones_vendedor = self
                 .publicaciones_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
-
-            self.publicaciones.push(publicacion.clone());
             publicaciones_vendedor.push(self.publicaciones.len() as u32 - 1); // agrega el index de la publicacion
             self.publicaciones_mapping
                 .insert(usuario.account_id, &publicaciones_vendedor);
@@ -186,58 +186,41 @@ mod marketplace {
         #[ink(message)]
         pub fn ordenar_compra(
             &mut self,
-            id_vendedor: AccountId,
-            id_publicacion: u64,
-        ) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            idx_publicacion: u32,
+        ) -> Result<OrdenCompra, ErrorSistema> {
             // validaciones de usuario
             let usuario = self.get_usuario()?;
-            // validaciones de comprador
             usuario.es_comprador()?;
-            // validaciones de vendedor
-            let vendedor = self
-                .usuarios
-                .get(id_vendedor)
-                .ok_or(ErrorSistema::VendedorNoExistente)?;
-            vendedor.es_vendedor()?;
 
             // buscar publicacion, descrementar stock y aplicarlo
-            let mut publicaciones = self
+            let publicacion = self
                 .publicaciones
-                .get(id_vendedor)
-                .ok_or(ErrorSistema::VendedorSinPublicaciones)?;
-            let publicacion_clone = {
-                let publicacion = publicaciones
-                    .iter_mut()
-                    .find(|p| p.id == id_publicacion)
-                    .ok_or(ErrorSistema::PublicacionNoExistente)?;
-                if publicacion.stock == 0 {
-                    return Err(ErrorSistema::PublicacionSinStock);
-                }
-                publicacion.stock = publicacion
-                    .stock
-                    .checked_sub(1)
-                    .expect("No hay stock (igualmente fue chequeado)"); // por el lint de clippy que tiraba error
-                publicacion.clone()
-            };
-            self.publicaciones.insert(id_vendedor, &publicaciones);
+                .get(idx_publicacion as usize)
+                .cloned()
+                .ok_or(ErrorSistema::PublicacionNoExistente)?;
+            publicacion
+                .stock
+                .checked_sub(1)
+                .expect("TODO: Aca devolver error custom Publicacion sin stock"); // TODO
+            self.publicaciones[idx_publicacion as usize] = publicacion.clone();
 
             // crear orden de compra
             let orden_compra = OrdenCompra {
                 estado: Estado::Pendiente,
-                publicacion: publicacion_clone,
+                publicacion,
                 comprador_id: usuario.account_id,
                 peticion_cancelacion: false,
             };
 
-            let mut ordenes_compra = self
-                .ordenes_compra
+            let mut ordenes_compra_comprador = self
+                .ordenes_compra_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
-            ordenes_compra.push(orden_compra);
-            self.ordenes_compra
-                .insert(usuario.account_id, &ordenes_compra);
+            ordenes_compra_comprador.push(orden_compra.clone());
+            self.ordenes_compra_mapping
+                .insert(usuario.account_id, &ordenes_compra_comprador);
 
-            Ok(ordenes_compra)
+            Ok(orden_compra)
         }
 
         #[ink(message)]
