@@ -16,7 +16,9 @@ mod marketplace {
         publicaciones: Vec<Publicacion>,
         ordenes_compra: Vec<OrdenCompra>,
         publicaciones_mapping: Mapping<AccountId, Vec<u32>>, // (id_vendedor, id's publicaciones)
-        ordenes_compra_mapping: Mapping<AccountId, Vec<OrdenCompra>>, // (id_comprador, id's ordenes)
+        ordenes_compra_mapping: Mapping<AccountId, Vec<u32>>, // (id_comprador, id's ordenes)
+                                                             // u32 parece ser la mejor opción, usize no existe en ink porque depende de la arquitectura
+                                                             // u64 incrementaría los costos de transacción
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -158,7 +160,7 @@ mod marketplace {
                 .publicaciones_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
-            publicaciones_vendedor.push(self.publicaciones.len() as u32 - 1); // agrega el index de la publicacion
+            publicaciones_vendedor.push((self.publicaciones.len() - 1).try_into().unwrap()); // agrega el index de la publicacion
             self.publicaciones_mapping
                 .insert(usuario.account_id, &publicaciones_vendedor);
 
@@ -216,7 +218,7 @@ mod marketplace {
                 .ordenes_compra_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
-            ordenes_compra_comprador.push(orden_compra.clone());
+            ordenes_compra_comprador.push(self.ordenes_compra.len() as u32 - 1);
             self.ordenes_compra_mapping
                 .insert(usuario.account_id, &ordenes_compra_comprador);
 
@@ -227,17 +229,24 @@ mod marketplace {
         pub fn get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
             let usuario = self.get_usuario()?;
             usuario.es_comprador()?;
-            let ordenes_compra = self
-                .ordenes_compra
+
+            let ids_ordenes_compra_comprador = self
+                .ordenes_compra_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
-            Ok(ordenes_compra)
+
+            let ordenes_compra_comprador = ids_ordenes_compra_comprador
+                .iter()
+                .filter_map(|&i| self.ordenes_compra.get(i as usize))
+                .cloned()
+                .collect();
+
+            Ok(ordenes_compra_comprador)
         }
     }
 
     impl Publicacion {
         pub fn new(
-            id: u64,
             vendedor_id: AccountId,
             nombre_producto: String,
             descripcion: String,
@@ -246,7 +255,6 @@ mod marketplace {
             stock: u64,
         ) -> Publicacion {
             Publicacion {
-                id,
                 vendedor_id,
                 nombre_producto,
                 descripcion,
