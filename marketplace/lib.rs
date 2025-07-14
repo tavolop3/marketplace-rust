@@ -59,12 +59,13 @@ mod marketplace {
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct Publicacion {
-        vendedor_id: AccountId,
+        id_publicacion: u64,
         nombre_producto: String,
         descripcion: String,
         precio: u64,
         categoria: Categoria,
         stock: u64,
+        vendedor_id: AccountId,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -157,10 +158,21 @@ mod marketplace {
 
         //Crea una publicacion
         #[ink(message)]
-        pub fn publicar(&mut self, publicacion: Publicacion) -> Result<Publicacion, ErrorSistema> {
+        pub fn publicar(&mut self, nom_producto:String, desc:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
             //Validacion de usuario
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
+
+            //Crea la publicacion
+            let publicacion = Publicacion::new(
+                self.publicaciones.len() as u64,
+                nom_producto,
+                desc,
+                precio,
+                categoria,
+                stock,
+                usuario.account_id
+            );
 
             //Agrega la publicacion al sistema
             self.publicaciones.push(publicacion.clone());
@@ -224,7 +236,7 @@ mod marketplace {
             //Buscar publicacion
             let publicacion = self
                 .publicaciones
-                .get(idx_publicacion as usize)
+                .get_mut(idx_publicacion as usize)
                 .cloned()
                 .ok_or(ErrorSistema::PublicacionNoExistente)?;
             //Decrementar Stock
@@ -295,20 +307,22 @@ mod marketplace {
 
     impl Publicacion {
         pub fn new(
-            vendedor_id: AccountId,
+            id_publicacion: u64,
             nombre_producto: String,
             descripcion: String,
             precio: u64,
             categoria: Categoria,
             stock: u64,
+            vendedor_id: AccountId,
         ) -> Publicacion {
             Publicacion {
-                vendedor_id,
+                id_publicacion,
                 nombre_producto,
                 descripcion,
                 precio,
                 categoria,
                 stock,
+                vendedor_id,
             }
         }
     }
