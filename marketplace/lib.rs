@@ -33,7 +33,8 @@ mod marketplace {
         VendedorSinPublicaciones,
         PublicacionSinStock,
         PublicacionNoExistente,
-        OverflowIdProducto,
+        UnderflowPublicaciones,
+        UnderflowOrdenes,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -121,6 +122,7 @@ mod marketplace {
             Self::new()
         }
 
+        //Retorna los datos de un usuario si existe en el sistema
         #[ink(message)]
         pub fn get_usuario(&self) -> Result<Usuario, ErrorSistema> {
             self.usuarios
@@ -128,54 +130,71 @@ mod marketplace {
                 .ok_or(ErrorSistema::UsuarioNoRegistrado)
         }
 
+        //Registra usuarios que no estan en el sistema
         #[ink(message)]
         pub fn registrar_usuario(
             &mut self,
             username: String,
             rol: Rol,
         ) -> Result<Usuario, ErrorSistema> {
+            //Verifica si el usuario ya esta registrado
             if self.usuarios.get(self.env().caller()).is_some() {
                 return Err(ErrorSistema::UsuarioYaRegistrado);
             };
 
+            //Crea el nuevo usuario
             let usuario = Usuario {
                 account_id: self.env().caller(),
                 username,
                 rol,
             };
 
+            //Almacena el nuevo usuario en el sistema
             self.usuarios.insert(self.env().caller(), &usuario);
 
             Ok(usuario)
         }
 
+        //Crea una publicacion
         #[ink(message)]
         pub fn publicar(&mut self, publicacion: Publicacion) -> Result<Publicacion, ErrorSistema> {
+            //Validacion de usuario
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
 
-            // agrega al vector total y el id al mapping
+            //Agrega la publicacion al sistema
             self.publicaciones.push(publicacion.clone());
+            //Agrega el index de la publicacion al vector personal del vendedor
             let mut publicaciones_vendedor = self
                 .publicaciones_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
-            publicaciones_vendedor.push((self.publicaciones.len() - 1).try_into().unwrap()); // agrega el index de la publicacion
+
+            let index_pub = (self.publicaciones.len() as u32).checked_sub(1).ok_or(ErrorSistema::UnderflowPublicaciones)?; // Calcula el index
+            publicaciones_vendedor.push(index_pub); // Agrega el index de la publicacion
+
+            //Almacena el vector de indexs del usuario
             self.publicaciones_mapping
                 .insert(usuario.account_id, &publicaciones_vendedor);
 
             Ok(publicacion)
         }
 
+        //Retorna las publicaciones del vendedor solicitante
         #[ink(message)]
         pub fn get_publicaciones_vendedor(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
+            //Validacion de usuario
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
+
+            //Obtiene el vector con ids de publicaciones del vendedor
             let ids_publicaciones_vendedor = self
                 .publicaciones_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
 
+            //Recorre las publicaciones del sistema y arma un vector con las
+            //publicaciones del vendedor solicitante
             let publicaciones_vendedor = ids_publicaciones_vendedor
                 .iter()
                 .filter_map(|&i| self.publicaciones.get(i as usize))
@@ -185,6 +204,14 @@ mod marketplace {
             Ok(publicaciones_vendedor)
         }
 
+        //Retorna las publicaciones de todos los vendedores
+        #[ink(message)]
+        pub fn get_publicaciones(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
+            self.get_usuario()?;
+            Ok(self.publicaciones.clone())
+        }
+
+        //Crea una orden de compra
         #[ink(message)]
         pub fn ordenar_compra(
             &mut self,
@@ -194,16 +221,18 @@ mod marketplace {
             let usuario = self.get_usuario()?;
             usuario.es_comprador()?;
 
-            // buscar publicacion, descrementar stock y aplicarlo
+            //Buscar publicacion
             let publicacion = self
                 .publicaciones
                 .get(idx_publicacion as usize)
                 .cloned()
                 .ok_or(ErrorSistema::PublicacionNoExistente)?;
+            //Decrementar Stock
             publicacion
                 .stock
                 .checked_sub(1)
-                .expect("TODO: Aca devolver error custom Publicacion sin stock"); // TODO
+                .ok_or(ErrorSistema::PublicacionSinStock)?;
+            //Actualizar publicacion
             self.publicaciones[idx_publicacion as usize] = publicacion.clone();
 
             // crear orden de compra
@@ -214,27 +243,39 @@ mod marketplace {
                 peticion_cancelacion: false,
             };
 
+            //Agrega la orden de compra al sistema
+            self.ordenes_compra.push(orden_compra.clone());
+            //Agrega el index de la orden de compra al vector personal del comprador
             let mut ordenes_compra_comprador = self
                 .ordenes_compra_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
-            ordenes_compra_comprador.push(self.ordenes_compra.len() as u32 - 1);
+
+            let index_ord = (self.ordenes_compra.len() as u32).checked_sub(1).ok_or(ErrorSistema::UnderflowOrdenes)?; // Calcula el index
+            ordenes_compra_comprador.push(index_ord); // Agrega el index de la orden de compra
+
+            //Almacena el vector de indexs del usuario
             self.ordenes_compra_mapping
                 .insert(usuario.account_id, &ordenes_compra_comprador);
 
             Ok(orden_compra)
         }
 
+        //Retorna las ordenes de compra del comprador solicitante
         #[ink(message)]
         pub fn get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            //Validacion de usuario
             let usuario = self.get_usuario()?;
             usuario.es_comprador()?;
 
+            //Obtiene el vector con ids de ordenes de compra del comprador
             let ids_ordenes_compra_comprador = self
                 .ordenes_compra_mapping
                 .get(usuario.account_id)
                 .unwrap_or_default();
 
+            //Recorre las ordenes de compra del sistema y arma un vector con las
+            //ordenes de compra del comprador solicitante
             let ordenes_compra_comprador = ids_ordenes_compra_comprador
                 .iter()
                 .filter_map(|&i| self.ordenes_compra.get(i as usize))
@@ -242,6 +283,13 @@ mod marketplace {
                 .collect();
 
             Ok(ordenes_compra_comprador)
+        }
+
+        //Retorna las ordenes de compra de todos los compradores
+        #[ink(message)]
+        pub fn get_ordenes(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            self.get_usuario()?;
+            Ok(self.ordenes_compra.clone())
         }
     }
 
@@ -266,6 +314,7 @@ mod marketplace {
     }
 
     impl Usuario {
+        //Valida que el usuario tenga rol Vendedor o Ambos
         fn es_vendedor(&self) -> Result<bool, ErrorSistema> {
             if matches!(self.rol, Rol::Comprador) {
                 Err(ErrorSistema::UsuarioNoEsVendedor)
@@ -274,6 +323,7 @@ mod marketplace {
             }
         }
 
+        //Valida que el usuario tenga rol Comprador o Ambos
         fn es_comprador(&self) -> Result<bool, ErrorSistema> {
             if matches!(self.rol, Rol::Vendedor) {
                 Err(ErrorSistema::UsuarioNoEsComprador)
