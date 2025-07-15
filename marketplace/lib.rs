@@ -126,6 +126,11 @@ mod marketplace {
         //Retorna los datos de un usuario si existe en el sistema
         #[ink(message)]
         pub fn get_usuario(&self) -> Result<Usuario, ErrorSistema> {
+            self._get_usuario()
+        }
+
+        //Funcion prueba get_usuario()
+        fn _get_usuario(&self) -> Result<Usuario, ErrorSistema> {
             self.usuarios
                 .get(self.env().caller())
                 .ok_or(ErrorSistema::UsuarioNoRegistrado)
@@ -133,11 +138,12 @@ mod marketplace {
 
         //Registra usuarios que no estan en el sistema
         #[ink(message)]
-        pub fn registrar_usuario(
-            &mut self,
-            username: String,
-            rol: Rol,
-        ) -> Result<Usuario, ErrorSistema> {
+        pub fn registrar_usuario(&mut self,username: String,rol: Rol) -> Result<Usuario, ErrorSistema> {
+            self._registrar_usuario(username,rol)
+        }
+
+        //Funcion prueba registrar_usuario()
+        fn _registrar_usuario(&mut self,username: String,rol: Rol) -> Result<Usuario, ErrorSistema> {
             //Verifica si el usuario ya esta registrado
             if self.usuarios.get(self.env().caller()).is_some() {
                 return Err(ErrorSistema::UsuarioYaRegistrado);
@@ -158,7 +164,12 @@ mod marketplace {
 
         //Crea una publicacion
         #[ink(message)]
-        pub fn publicar(&mut self, nom_producto:String, desc:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
+        pub fn publicar(&mut self, nombre_producto:String, descripcion:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
+            self._publicar(nombre_producto,descripcion,precio,categoria,stock)
+        }
+
+        //Funcion prueba publicar()
+        fn _publicar(&mut self, nombre_producto:String, descripcion:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
             //Validacion de usuario
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
@@ -166,8 +177,8 @@ mod marketplace {
             //Crea la publicacion
             let publicacion = Publicacion::new(
                 self.publicaciones.len() as u64,
-                nom_producto,
-                desc,
+                nombre_producto,
+                descripcion,
                 precio,
                 categoria,
                 stock,
@@ -195,6 +206,11 @@ mod marketplace {
         //Retorna las publicaciones del vendedor solicitante
         #[ink(message)]
         pub fn get_publicaciones_vendedor(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
+            self._get_publicaciones_vendedor()
+        }
+
+        //Funcion prueba get_publicaciones_vendedor()
+        fn _get_publicaciones_vendedor(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
             //Validacion de usuario
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
@@ -219,16 +235,23 @@ mod marketplace {
         //Retorna las publicaciones de todos los vendedores
         #[ink(message)]
         pub fn get_publicaciones(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
+            self._get_publicaciones()
+        }
+
+        //Funcion prueba get_publicaciones()
+        fn _get_publicaciones(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
             self.get_usuario()?;
             Ok(self.publicaciones.clone())
         }
 
         //Crea una orden de compra
         #[ink(message)]
-        pub fn ordenar_compra(
-            &mut self,
-            idx_publicacion: u32,
-        ) -> Result<OrdenCompra, ErrorSistema> {
+        pub fn ordenar_compra(&mut self,idx_publicacion: u32) -> Result<OrdenCompra, ErrorSistema> {
+            self._ordenar_compra(idx_publicacion)
+        }
+
+        //Funcion prueba ordenar_compra()
+        fn _ordenar_compra(&mut self,idx_publicacion: u32) -> Result<OrdenCompra, ErrorSistema> {
             // validaciones de usuario
             let usuario = self.get_usuario()?;
             usuario.es_comprador()?;
@@ -276,6 +299,11 @@ mod marketplace {
         //Retorna las ordenes de compra del comprador solicitante
         #[ink(message)]
         pub fn get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            self._get_ordenes_comprador()
+        }
+
+        //Funcion prueba get_ordenes_comprador()
+        fn _get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
             //Validacion de usuario
             let usuario = self.get_usuario()?;
             usuario.es_comprador()?;
@@ -300,6 +328,11 @@ mod marketplace {
         //Retorna las ordenes de compra de todos los compradores
         #[ink(message)]
         pub fn get_ordenes(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            self._get_ordenes()
+        }
+
+        //Funcion prueba get_ordenes
+        fn _get_ordenes(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
             self.get_usuario()?;
             Ok(self.ordenes_compra.clone())
         }
@@ -355,36 +388,36 @@ mod marketplace {
             use super::*;
 
             #[test]
-            fn test_es_vendedor_true_vendedor() {
+            fn tests_es_vendedor_true_vendedor() {
                 let usuario = Usuario {
-                    account_id: 22,
-                    username: agustin22,
+                    account_id: AccountId::from([0xAA; 32]),
+                    username: "agustin22".to_string(),
                     rol: Rol::Vendedor,
                 };
 
-                assert_eq!(usuario.es_vendedor(), true);
+                assert_eq!(usuario.es_vendedor().is_ok(), true);
             }
 
             #[test]
-            fn test_es_vendedor_true_ambos() {
+            fn tests_es_vendedor_true_ambos() {
                 let usuario = Usuario {
-                    account_id: 22,
-                    username: agustin22,
+                    account_id: AccountId::from([0xAA; 32]),
+                    username: "agustin22".to_string(),
                     rol: Rol::Ambos,
                 };
 
-                assert_eq!(usuario.es_vendedor(), true);
+                assert_eq!(usuario.es_vendedor().is_ok(), true);
             }
 
             #[test]
-            fn test_es_vendedor_false() {
+            fn tests_es_vendedor_false() {
                 let usuario = Usuario {
-                    account_id: 22,
-                    username: agustin22,
+                    account_id: AccountId::from([0xAA; 32]),
+                    username: "agustin22".to_string(),
                     rol: Rol::Comprador,
                 };
 
-                assert_eq!(usuario.es_vendedor(), false);
+                assert_eq!(usuario.es_vendedor().is_ok(), false);
             }
         }
 
@@ -392,36 +425,36 @@ mod marketplace {
             use super::*;
 
             #[test]
-            fn test_es_comprador_true_comprador() {
+            fn tests_es_comprador_true_comprador() {
                 let usuario = Usuario {
-                    account_id: 22,
-                    username: agustin22,
+                    account_id: AccountId::from([0xAA; 32]),
+                    username: "agustin22".to_string(),
                     rol: Rol::Comprador,
                 };
 
-                assert_eq!(usuario.es_comprador(), true);
+                assert_eq!(usuario.es_comprador().is_ok(), true);
             }
 
             #[test]
-            fn test_es_comprador_true_ambos() {
+            fn tests_es_comprador_true_ambos() {
                 let usuario = Usuario {
-                    account_id: 22,
-                    username: agustin22,
+                    account_id: AccountId::from([0xAA; 32]),
+                    username: "agustin22".to_string(),
                     rol: Rol::Ambos,
                 };
 
-                assert_eq!(usuario.es_comprador(), true);
+                assert_eq!(usuario.es_comprador().is_ok(), true);
             }
 
             #[test]
-            fn test_es_comprador_false() {
+            fn tests_es_comprador_false() {
                 let usuario = Usuario {
-                    account_id: 22,
-                    username: agustin22,
+                    account_id: AccountId::from([0xAA; 32]),
+                    username: "agustin22".to_string(),
                     rol: Rol::Vendedor,
                 };
 
-                assert_eq!(usuario.es_comprador(), false);
+                assert_eq!(usuario.es_comprador().is_ok(), false);
             }
         }
     }
