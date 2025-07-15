@@ -41,9 +41,9 @@ mod marketplace {
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     #[derive(Debug, Clone)]
     pub struct Usuario {
-        account_id: AccountId,
         username: String,
         rol: Rol,
+        account_id: AccountId,
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -122,56 +122,56 @@ mod marketplace {
         pub fn default() -> Self {
             Self::new()
         }
-
-        //Retorna los datos de un usuario si existe en el sistema
-        #[ink(message)]
-        pub fn get_usuario(&self) -> Result<Usuario, ErrorSistema> {
-            self._get_usuario()
-        }
-
-        //Funcion prueba get_usuario()
-        fn _get_usuario(&self) -> Result<Usuario, ErrorSistema> {
-            self.usuarios
-                .get(self.env().caller())
-                .ok_or(ErrorSistema::UsuarioNoRegistrado)
-        }
-
+        
         //Registra usuarios que no estan en el sistema
         #[ink(message)]
-        pub fn registrar_usuario(&mut self,username: String,rol: Rol) -> Result<Usuario, ErrorSistema> {
-            self._registrar_usuario(username,rol)
+        pub fn registrar_usuario(&mut self,caller:AccountId,username: String,rol: Rol) -> Result<Usuario, ErrorSistema> {
+            self._registrar_usuario(caller,username,rol)
         }
 
         //Funcion prueba registrar_usuario()
-        fn _registrar_usuario(&mut self,username: String,rol: Rol) -> Result<Usuario, ErrorSistema> {
+        fn _registrar_usuario(&mut self,caller:AccountId,username:String,rol:Rol) -> Result<Usuario, ErrorSistema> {
             //Verifica si el usuario ya esta registrado
-            if self.usuarios.get(self.env().caller()).is_some() {
+            if self.usuarios.get(caller).is_some() {
                 return Err(ErrorSistema::UsuarioYaRegistrado);
             };
 
             //Crea el nuevo usuario
             let usuario = Usuario {
-                account_id: self.env().caller(),
+                account_id: caller,
                 username,
                 rol,
             };
 
             //Almacena el nuevo usuario en el sistema
-            self.usuarios.insert(self.env().caller(), &usuario);
+            self.usuarios.insert(caller, &usuario);
 
             Ok(usuario)
         }
 
+        //Retorna los datos de un usuario si existe en el sistema
+        #[ink(message)]
+        pub fn get_usuario(&self, caller:AccountId) -> Result<Usuario, ErrorSistema> {
+            self._get_usuario(caller)
+        }
+
+        //Funcion prueba get_usuario()
+        fn _get_usuario(&self, caller:AccountId) -> Result<Usuario, ErrorSistema> {
+            self.usuarios
+                .get(caller)
+                .ok_or(ErrorSistema::UsuarioNoRegistrado)
+        }
+
         //Crea una publicacion
         #[ink(message)]
-        pub fn publicar(&mut self, nombre_producto:String, descripcion:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
-            self._publicar(nombre_producto,descripcion,precio,categoria,stock)
+        pub fn publicar(&mut self, caller:AccountId, nombre_producto:String, descripcion:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
+            self._publicar(caller,nombre_producto,descripcion,precio,categoria,stock)
         }
 
         //Funcion prueba publicar()
-        fn _publicar(&mut self, nombre_producto:String, descripcion:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
+        fn _publicar(&mut self, caller:AccountId, nombre_producto:String, descripcion:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
             //Validacion de usuario
-            let usuario = self.get_usuario()?;
+            let usuario = self.get_usuario(caller)?;
             usuario.es_vendedor()?;
 
             //Crea la publicacion
@@ -205,14 +205,14 @@ mod marketplace {
 
         //Retorna las publicaciones del vendedor solicitante
         #[ink(message)]
-        pub fn get_publicaciones_vendedor(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
-            self._get_publicaciones_vendedor()
+        pub fn get_publicaciones_vendedor(&self,caller:AccountId) -> Result<Vec<Publicacion>, ErrorSistema> {
+            self._get_publicaciones_vendedor(caller)
         }
 
         //Funcion prueba get_publicaciones_vendedor()
-        fn _get_publicaciones_vendedor(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
+        fn _get_publicaciones_vendedor(&self,caller:AccountId) -> Result<Vec<Publicacion>, ErrorSistema> {
             //Validacion de usuario
-            let usuario = self.get_usuario()?;
+            let usuario = self.get_usuario(caller)?;
             usuario.es_vendedor()?;
 
             //Obtiene el vector con ids de publicaciones del vendedor
@@ -234,26 +234,26 @@ mod marketplace {
 
         //Retorna las publicaciones de todos los vendedores
         #[ink(message)]
-        pub fn get_publicaciones(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
-            self._get_publicaciones()
+        pub fn get_publicaciones(&self,caller:AccountId) -> Result<Vec<Publicacion>, ErrorSistema> {
+            self._get_publicaciones(caller)
         }
 
         //Funcion prueba get_publicaciones()
-        fn _get_publicaciones(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
-            self.get_usuario()?;
+        fn _get_publicaciones(&self,caller:AccountId) -> Result<Vec<Publicacion>, ErrorSistema> {
+            self.get_usuario(caller)?;
             Ok(self.publicaciones.clone())
         }
 
         //Crea una orden de compra
         #[ink(message)]
-        pub fn ordenar_compra(&mut self,idx_publicacion: u32) -> Result<OrdenCompra, ErrorSistema> {
-            self._ordenar_compra(idx_publicacion)
+        pub fn ordenar_compra(&mut self,caller:AccountId,idx_publicacion: u32) -> Result<OrdenCompra, ErrorSistema> {
+            self._ordenar_compra(caller,idx_publicacion)
         }
 
         //Funcion prueba ordenar_compra()
-        fn _ordenar_compra(&mut self,idx_publicacion: u32) -> Result<OrdenCompra, ErrorSistema> {
+        fn _ordenar_compra(&mut self,caller:AccountId,idx_publicacion: u32) -> Result<OrdenCompra, ErrorSistema> {
             // validaciones de usuario
-            let usuario = self.get_usuario()?;
+            let usuario = self.get_usuario(caller)?;
             usuario.es_comprador()?;
 
             //Buscar publicacion
@@ -298,14 +298,14 @@ mod marketplace {
 
         //Retorna las ordenes de compra del comprador solicitante
         #[ink(message)]
-        pub fn get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
-            self._get_ordenes_comprador()
+        pub fn get_ordenes_comprador(&self,caller:AccountId) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            self._get_ordenes_comprador(caller)
         }
 
         //Funcion prueba get_ordenes_comprador()
-        fn _get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+        fn _get_ordenes_comprador(&self,caller:AccountId) -> Result<Vec<OrdenCompra>, ErrorSistema> {
             //Validacion de usuario
-            let usuario = self.get_usuario()?;
+            let usuario = self.get_usuario(caller)?;
             usuario.es_comprador()?;
 
             //Obtiene el vector con ids de ordenes de compra del comprador
@@ -327,13 +327,13 @@ mod marketplace {
 
         //Retorna las ordenes de compra de todos los compradores
         #[ink(message)]
-        pub fn get_ordenes(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
-            self._get_ordenes()
+        pub fn get_ordenes(&self,caller:AccountId) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            self._get_ordenes(caller)
         }
 
         //Funcion prueba get_ordenes
-        fn _get_ordenes(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
-            self.get_usuario()?;
+        fn _get_ordenes(&self,caller:AccountId) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            self.get_usuario(caller)?;
             Ok(self.ordenes_compra.clone())
         }
     }
@@ -456,6 +456,25 @@ mod marketplace {
 
                 assert_eq!(usuario.es_comprador().is_ok(), false);
             }
+        }
+
+        mod tests_registrar_usuario {
+            use super::*;
+
+            #[test]
+            fn tests_registrar_usuario_no_registrado(){
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Ambos;
+
+                let _ = marketplace._registrar_usuario(caller,username,rol);
+
+                assert_eq!(marketplace._get_usuario(caller).is_ok(),true);
+            }
+
+            
         }
     }
 
