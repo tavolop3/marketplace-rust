@@ -158,7 +158,14 @@ mod marketplace {
 
         //Crea una publicacion
         #[ink(message)]
-        pub fn publicar(&mut self, nom_producto:String, desc:String, precio:u64, categoria:Categoria, stock:u64) -> Result<Publicacion, ErrorSistema> {
+        pub fn publicar(
+            &mut self,
+            nom_producto: String,
+            desc: String,
+            precio: u64,
+            categoria: Categoria,
+            stock: u64,
+        ) -> Result<Publicacion, ErrorSistema> {
             //Validacion de usuario
             let usuario = self.get_usuario()?;
             usuario.es_vendedor()?;
@@ -171,7 +178,7 @@ mod marketplace {
                 precio,
                 categoria,
                 stock,
-                usuario.account_id
+                usuario.account_id,
             );
 
             //Agrega la publicacion al sistema
@@ -182,7 +189,9 @@ mod marketplace {
                 .get(usuario.account_id)
                 .unwrap_or_default();
 
-            let index_pub = (self.publicaciones.len() as u32).checked_sub(1).ok_or(ErrorSistema::UnderflowPublicaciones)?; // Calcula el index
+            let index_pub = (self.publicaciones.len() as u32)
+                .checked_sub(1)
+                .ok_or(ErrorSistema::UnderflowPublicaciones)?; // Calcula el index
             publicaciones_vendedor.push(index_pub); // Agrega el index de la publicacion
 
             //Almacena el vector de indexs del usuario
@@ -234,23 +243,25 @@ mod marketplace {
             usuario.es_comprador()?;
 
             //Buscar publicacion
-            let publicacion = self
+            let mut publicacion = self
                 .publicaciones
-                .get_mut(idx_publicacion as usize)
+                .get(idx_publicacion as usize)
                 .cloned()
                 .ok_or(ErrorSistema::PublicacionNoExistente)?;
+
             //Decrementar Stock
-            publicacion
+            publicacion.stock = publicacion
                 .stock
                 .checked_sub(1)
                 .ok_or(ErrorSistema::PublicacionSinStock)?;
-            //Actualizar publicacion
+
+            // Reemplazar la publicación modificada
             self.publicaciones[idx_publicacion as usize] = publicacion.clone();
 
             // crear orden de compra
             let orden_compra = OrdenCompra {
                 estado: Estado::Pendiente,
-                publicacion,
+                publicacion: publicacion.clone(),
                 comprador_id: usuario.account_id,
                 peticion_cancelacion: false,
             };
@@ -263,7 +274,9 @@ mod marketplace {
                 .get(usuario.account_id)
                 .unwrap_or_default();
 
-            let index_ord = (self.ordenes_compra.len() as u32).checked_sub(1).ok_or(ErrorSistema::UnderflowOrdenes)?; // Calcula el index
+            let index_ord = (self.ordenes_compra.len() as u32)
+                .checked_sub(1)
+                .ok_or(ErrorSistema::UnderflowOrdenes)?; // Calcula el index
             ordenes_compra_comprador.push(index_ord); // Agrega el index de la orden de compra
 
             //Almacena el vector de indexs del usuario
