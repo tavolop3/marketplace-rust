@@ -166,7 +166,6 @@ mod marketplace {
         #[ignore]
         pub fn publicar(
             &mut self,
-            caller: AccountId,
             nombre_producto: String,
             descripcion: String,
             precio: u64,
@@ -174,7 +173,7 @@ mod marketplace {
             stock: u64,
         ) -> Result<Publicacion, ErrorSistema> {
             self._publicar(
-                caller,
+                self.env().caller(),
                 nombre_producto,
                 descripcion,
                 precio,
@@ -194,7 +193,7 @@ mod marketplace {
             stock: u64,
         ) -> Result<Publicacion, ErrorSistema> {
             //Validacion de usuario
-            let usuario = self.get_usuario()?;
+            let usuario = self._get_usuario(caller)?;
             usuario.es_vendedor()?;
 
             //Crea la publicacion
@@ -231,11 +230,8 @@ mod marketplace {
         //Retorna las publicaciones del vendedor solicitante
         #[ink(message)]
         #[ignore]
-        pub fn get_publicaciones_vendedor(
-            &self,
-            caller: AccountId,
-        ) -> Result<Vec<Publicacion>, ErrorSistema> {
-            self._get_publicaciones_vendedor(caller)
+        pub fn get_publicaciones_vendedor(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
+            self._get_publicaciones_vendedor(self.env().caller())
         }
 
         //Funcion prueba get_publicaciones_vendedor()
@@ -244,7 +240,7 @@ mod marketplace {
             caller: AccountId,
         ) -> Result<Vec<Publicacion>, ErrorSistema> {
             //Validacion de usuario
-            let usuario = self.get_usuario(caller)?;
+            let usuario = self._get_usuario(caller)?;
             usuario.es_vendedor()?;
 
             //Obtiene el vector con ids de publicaciones del vendedor
@@ -267,16 +263,13 @@ mod marketplace {
         //Retorna las publicaciones de todos los vendedores
         #[ink(message)]
         #[ignore]
-        pub fn get_publicaciones(
-            &self,
-            caller: AccountId,
-        ) -> Result<Vec<Publicacion>, ErrorSistema> {
-            self._get_publicaciones(caller)
+        pub fn get_publicaciones(&self) -> Result<Vec<Publicacion>, ErrorSistema> {
+            self._get_publicaciones(self.env().caller())
         }
 
         //Funcion prueba get_publicaciones()
         fn _get_publicaciones(&self, caller: AccountId) -> Result<Vec<Publicacion>, ErrorSistema> {
-            self.get_usuario(caller)?;
+            self._get_usuario(caller)?;
             Ok(self.publicaciones.clone())
         }
 
@@ -285,10 +278,9 @@ mod marketplace {
         #[ignore]
         pub fn ordenar_compra(
             &mut self,
-            caller: AccountId,
             idx_publicacion: u32,
         ) -> Result<OrdenCompra, ErrorSistema> {
-            self._ordenar_compra(caller, idx_publicacion)
+            self._ordenar_compra(self.env().caller(), idx_publicacion)
         }
 
         //Funcion prueba ordenar_compra()
@@ -298,7 +290,7 @@ mod marketplace {
             idx_publicacion: u32,
         ) -> Result<OrdenCompra, ErrorSistema> {
             // validaciones de usuario
-            let usuario = self.get_usuario(caller)?;
+            let usuario = self._get_usuario(caller)?;
             usuario.es_comprador()?;
 
             //Buscar publicacion
@@ -348,11 +340,8 @@ mod marketplace {
         //Retorna las ordenes de compra del comprador solicitante
         #[ink(message)]
         #[ignore]
-        pub fn get_ordenes_comprador(
-            &self,
-            caller: AccountId,
-        ) -> Result<Vec<OrdenCompra>, ErrorSistema> {
-            self._get_ordenes_comprador(caller)
+        pub fn get_ordenes_comprador(&self) -> Result<Vec<OrdenCompra>, ErrorSistema> {
+            self._get_ordenes_comprador(self.env().caller())
         }
 
         //Funcion prueba get_ordenes_comprador()
@@ -361,7 +350,7 @@ mod marketplace {
             caller: AccountId,
         ) -> Result<Vec<OrdenCompra>, ErrorSistema> {
             //Validacion de usuario
-            let usuario = self.get_usuario(caller)?;
+            let usuario = self._get_usuario(caller)?;
             usuario.es_comprador()?;
 
             //Obtiene el vector con ids de ordenes de compra del comprador
@@ -390,7 +379,7 @@ mod marketplace {
 
         //Funcion prueba get_ordenes
         fn _get_ordenes(&self, caller: AccountId) -> Result<Vec<OrdenCompra>, ErrorSistema> {
-            self.get_usuario(caller)?;
+            self._get_usuario(caller)?;
             Ok(self.ordenes_compra.clone())
         }
     }
