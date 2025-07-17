@@ -23,7 +23,7 @@ mod marketplace {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    #[derive(Debug)]
+    #[derive(Debug,PartialEq)]
     pub enum ErrorSistema {
         UsuarioNoRegistrado,
         UsuarioYaRegistrado,
@@ -39,7 +39,7 @@ mod marketplace {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Usuario {
         username: String,
         rol: Rol,
@@ -48,7 +48,7 @@ mod marketplace {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum Rol {
         Comprador,
         Vendedor,
@@ -57,7 +57,7 @@ mod marketplace {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Publicacion {
         id_publicacion: u64,
         nombre_producto: String,
@@ -70,7 +70,7 @@ mod marketplace {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum Categoria {
         Computacion,
         Ropa,
@@ -80,7 +80,7 @@ mod marketplace {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct OrdenCompra {
         estado: Estado,
         publicacion: Publicacion,
@@ -91,7 +91,7 @@ mod marketplace {
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum Estado {
         Pendiente,
         Enviada,
@@ -257,23 +257,25 @@ mod marketplace {
             usuario.es_comprador()?;
 
             //Buscar publicacion
-            let publicacion = self
+            let mut publicacion = self
                 .publicaciones
-                .get_mut(idx_publicacion as usize)
+                .get(idx_publicacion as usize)
                 .cloned()
                 .ok_or(ErrorSistema::PublicacionNoExistente)?;
+
             //Decrementar Stock
-            publicacion
+            publicacion.stock = publicacion
                 .stock
                 .checked_sub(1)
                 .ok_or(ErrorSistema::PublicacionSinStock)?;
-            //Actualizar publicacion
+
+            // Reemplazar la publicación modificada
             self.publicaciones[idx_publicacion as usize] = publicacion.clone();
 
             // crear orden de compra
             let orden_compra = OrdenCompra {
                 estado: Estado::Pendiente,
-                publicacion,
+                publicacion: publicacion.clone(),
                 comprador_id: usuario.account_id,
                 peticion_cancelacion: false,
             };
@@ -286,7 +288,9 @@ mod marketplace {
                 .get(usuario.account_id)
                 .unwrap_or_default();
 
-            let index_ord = (self.ordenes_compra.len() as u32).checked_sub(1).ok_or(ErrorSistema::UnderflowOrdenes)?; // Calcula el index
+            let index_ord = (self.ordenes_compra.len() as u32)
+                .checked_sub(1)
+                .ok_or(ErrorSistema::UnderflowOrdenes)?; // Calcula el index
             ordenes_compra_comprador.push(index_ord); // Agrega el index de la orden de compra
 
             //Almacena el vector de indexs del usuario
@@ -461,8 +465,38 @@ mod marketplace {
         mod tests_registrar_usuario {
             use super::*;
 
-            #[test]
+            #[ink::test]
             fn tests_registrar_usuario_no_registrado(){
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Ambos;
+
+                assert_eq!(marketplace._registrar_usuario(caller,username,rol).is_ok(),true);
+            }
+
+            #[ink::test]
+            fn tests_registrar_usuario_ya_registrado_error(){
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Ambos;
+
+                assert_eq!(marketplace._registrar_usuario(caller.clone(),username.clone(),rol.clone()).is_ok(),true);
+
+                let result = marketplace._registrar_usuario(caller,username,rol);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioYaRegistrado));
+            }
+        }
+
+        mod tests_get_usuario {
+            use super::*;
+
+            #[ink::test]
+            fn tests_get_usuario_encontrado() {
                 let mut marketplace = Marketplace::new();
 
                 let caller = AccountId::from([0xAA; 32]);
@@ -474,7 +508,351 @@ mod marketplace {
                 assert_eq!(marketplace._get_usuario(caller).is_ok(),true);
             }
 
-            
+            #[ink::test]
+            fn tests_get_usuario_no_encontrado() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+
+                let result = marketplace._get_usuario(caller);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoRegistrado));
+            }
+        }
+
+        mod tests_publicar {
+            use super::*;
+
+            #[ink::test]
+            fn tests_publicar_correcto() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Ambos;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let nombre_producto = "Remera".to_string();
+                let descripcion = "algodon".to_string();
+                let precio = 12000;
+                let categoria = Categoria::Ropa;
+                let stock = 20;
+
+                assert_eq!(marketplace._publicar(caller,nombre_producto,descripcion,precio,categoria,stock).is_ok(),true);
+            }
+
+            #[ink::test]
+            fn tests_publicar_usuario_no_encontrado() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+
+                let nombre_producto = "Remera".to_string();
+                let descripcion = "algodon".to_string();
+                let precio = 12000;
+                let categoria = Categoria::Ropa;
+                let stock = 20;
+
+                let result = marketplace._publicar(caller,nombre_producto,descripcion,precio,categoria,stock);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoRegistrado));
+            }
+
+            #[ink::test]
+            fn tests_publicar_usuario_no_vendedor() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Comprador;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let nombre_producto = "Remera".to_string();
+                let descripcion = "algodon".to_string();
+                let precio = 12000;
+                let categoria = Categoria::Ropa;
+                let stock = 20;
+
+                let result = marketplace._publicar(caller,nombre_producto,descripcion,precio,categoria,stock);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoEsVendedor));
+            }
+
+        }
+
+        mod tests_get_publicaciones_vendedor {
+            use super::*;
+
+            #[ink::test]
+            fn tests_get_publicaciones_vendedor_correcto() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Ambos;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let mut nombre_producto = "Remera".to_string();
+                let mut descripcion = "algodon".to_string();
+                let mut precio = 12000;
+                let mut categoria = Categoria::Ropa;
+                let mut stock = 20;
+
+                let _ = marketplace._publicar(caller,nombre_producto,descripcion,precio,categoria,stock);
+                
+                nombre_producto = "Pantalon".to_string();
+                descripcion = "Jean".to_string();
+                precio = 20000;
+                categoria = Categoria::Ropa;
+                stock = 5;
+
+                let _ = marketplace._publicar(caller,nombre_producto,descripcion,precio,categoria,stock);
+
+                assert_eq!(marketplace._get_publicaciones_vendedor(caller).is_ok(),true);
+
+                if let Ok(vec_publicaciones) = marketplace._get_publicaciones_vendedor(caller) {
+                    assert_eq!(vec_publicaciones.len(),2);
+                }
+            }
+
+            #[ink::test]
+            fn tests_get_publicaciones_vendedor_usuario_no_encontrado() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+
+                let result = marketplace._get_publicaciones_vendedor(caller);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoRegistrado));
+            }
+
+            #[ink::test]
+            fn tests_get_publicaciones_vendedor_usuario_no_vendedor() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Comprador;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let result = marketplace._get_publicaciones_vendedor(caller);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoEsVendedor));
+            }
+
+        }
+
+        mod tests_get_publicaciones {
+            use super::*;
+
+            #[ink::test]
+            fn tests_get_publicaciones_correcto() {
+                let mut marketplace = Marketplace::new();
+
+                let caller1 = AccountId::from([0xAA; 32]);
+                let username1 = "agustin".to_string();
+                let rol1 = Rol::Ambos;
+
+                let caller2 = AccountId::from([0xAA; 32]);
+                let username2 = "agustin".to_string();
+                let rol2 = Rol::Ambos;
+
+                let _ = marketplace._registrar_usuario(caller1.clone(),username1,rol1);
+                let _ = marketplace._registrar_usuario(caller2.clone(),username2,rol2);
+
+                let mut nombre_producto = "Remera".to_string();
+                let mut descripcion = "algodon".to_string();
+                let mut precio = 12000;
+                let mut categoria = Categoria::Ropa;
+                let mut stock = 20;
+
+                let _ = marketplace._publicar(caller1,nombre_producto,descripcion,precio,categoria,stock);
+                
+                nombre_producto = "Pantalon".to_string();
+                descripcion = "Jean".to_string();
+                precio = 20000;
+                categoria = Categoria::Ropa;
+                stock = 5;
+
+                let _ = marketplace._publicar(caller1,nombre_producto,descripcion,precio,categoria,stock);
+
+                nombre_producto = "Notebook".to_string();
+                descripcion = "Ryzen 7".to_string();
+                precio = 200000;
+                categoria = Categoria::Computacion;
+                stock = 10;
+
+                let _ = marketplace._publicar(caller2,nombre_producto,descripcion,precio,categoria,stock);
+
+                assert_eq!(marketplace._get_publicaciones(caller1).is_ok(),true);
+
+                if let Ok(vec_publicaciones) = marketplace._get_publicaciones(caller1) {
+                    assert_eq!(vec_publicaciones.len(),3);
+                }
+            }
+
+            #[ink::test]
+            fn tests_get_publicaciones_usuario_no_encontrado() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+
+                let result = marketplace._get_publicaciones(caller);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoRegistrado));
+            }
+        }
+
+        mod tests_ordenar_compra {
+            use super::*;
+
+            #[ink::test]
+            fn tests_ordenar_compra_correcto() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Ambos;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let mut nombre_producto = "Remera".to_string();
+                let mut descripcion = "algodon".to_string();
+                let mut precio = 12000;
+                let mut categoria = Categoria::Ropa;
+                let mut stock = 20;
+
+                let _ = marketplace._publicar(caller,nombre_producto,descripcion,precio,categoria,stock);
+
+                assert_eq!(marketplace._ordenar_compra(caller,0 as u32).is_ok(),true);
+            }
+
+            #[ink::test]
+            fn tests_ordenar_compra_usuario_no_encontrado() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+
+                let result = marketplace._ordenar_compra(caller,0 as u32);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoRegistrado));
+            }
+
+            #[ink::test]
+            fn tests_ordenar_compra_usuario_no_comprador() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Vendedor;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let result = marketplace._ordenar_compra(caller,0 as u32);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoEsComprador));
+            }
+
+            #[ink::test]
+            fn tests_ordenar_compra_publicacion_no_existente() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Ambos;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let mut nombre_producto = "Remera".to_string();
+                let mut descripcion = "algodon".to_string();
+                let mut precio = 12000;
+                let mut categoria = Categoria::Ropa;
+                let mut stock = 20;
+
+                let _ = marketplace._publicar(caller,nombre_producto,descripcion,precio,categoria,stock);
+
+                let result = marketplace._ordenar_compra(caller,1 as u32);
+
+                assert_eq!(result, Err(ErrorSistema::PublicacionNoExistente));
+            }
+
+            #[ink::test]
+            fn tests_ordenar_compra_publicacion_sin_stock() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Ambos;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let mut nombre_producto = "Remera".to_string();
+                let mut descripcion = "algodon".to_string();
+                let mut precio = 12000;
+                let mut categoria = Categoria::Ropa;
+                let mut stock = 0;
+
+                let _ = marketplace._publicar(caller,nombre_producto,descripcion,precio,categoria,stock);
+
+                let result = marketplace._ordenar_compra(caller,0 as u32);
+
+                assert_eq!(result, Err(ErrorSistema::PublicacionSinStock));
+            }
+        }
+
+        mod tests_get_ordenes_comprador {
+            use super::*;
+
+            #[ink::test]
+            fn tests_get_ordenes_comprador_correcto() {}
+
+            #[ink::test]
+            fn tests_get_ordenes_comprador_usuario_no_encontrado() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+
+                let result = marketplace._get_ordenes_comprador(caller);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoRegistrado));
+            }
+
+            #[ink::test]
+            fn tests_get_ordenes_comprador_usuario_no_comprador() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+                let username = "agustin".to_string();
+                let rol = Rol::Vendedor;
+
+                let _ = marketplace._registrar_usuario(caller.clone(),username,rol);
+
+                let result = marketplace._get_ordenes_comprador(caller);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoEsComprador));
+            }
+        }
+
+        mod tests_get_ordenes {
+            use super::*;
+
+            #[ink::test]
+            fn tests_get_ordenes_correcto() {}
+
+            #[ink::test]
+            fn tests_get_ordenes_usuario_no_encontrado() {
+                let mut marketplace = Marketplace::new();
+
+                let caller = AccountId::from([0xAA; 32]);
+
+                let result = marketplace._get_ordenes(caller);
+
+                assert_eq!(result, Err(ErrorSistema::UsuarioNoRegistrado));
+            }
         }
     }
 
