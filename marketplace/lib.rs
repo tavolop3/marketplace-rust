@@ -205,7 +205,6 @@ mod marketplace {
                 categoria,
                 stock,
                 usuario.account_id,
-                usuario.account_id,
             );
 
             //Agrega la publicacion al sistema
@@ -296,16 +295,12 @@ mod marketplace {
 
             //Buscar publicacion
             let mut publicacion = self
-            let mut publicacion = self
                 .publicaciones
-                .get(idx_publicacion as usize)
                 .get(idx_publicacion as usize)
                 .cloned()
                 .ok_or(ErrorSistema::PublicacionNoExistente)?;
 
-
             //Decrementar Stock
-            publicacion.stock = publicacion
             publicacion.stock = publicacion
                 .stock
                 .checked_sub(1)
@@ -320,7 +315,6 @@ mod marketplace {
             let orden_compra = OrdenCompra {
                 estado: Estado::Pendiente,
                 publicacion: publicacion.clone(),
-                publicacion: publicacion.clone(),
                 comprador_id: usuario.account_id,
                 peticion_cancelacion: false,
             };
@@ -333,9 +327,6 @@ mod marketplace {
                 .get(usuario.account_id)
                 .unwrap_or_default();
 
-            let index_ord = (self.ordenes_compra.len() as u32)
-                .checked_sub(1)
-                .ok_or(ErrorSistema::UnderflowOrdenes)?; // Calcula el index
             let index_ord = (self.ordenes_compra.len() as u32)
                 .checked_sub(1)
                 .ok_or(ErrorSistema::UnderflowOrdenes)?; // Calcula el index
